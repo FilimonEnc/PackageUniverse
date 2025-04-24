@@ -1,13 +1,56 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+using PackageUniverse.ApiService.Services;
+using PackageUniverse.Application;
+using PackageUniverse.Application.CQRS.Packages.Queries.GetPackages;
+using PackageUniverse.Application.Interfaces;
+using PackageUniverse.Infrastructure.Data;
+
+using Scalar.AspNetCore;
+
+using System.Reflection;
+
+using UrlShortener.Api.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 
+builder.AddNpgsqlDbContext<PUContext>(connectionName: "packagedb");
+
+var services = builder.Services;
+
+services.AddScoped<IPUContext, PUContext>();
+
+//services.AddMediatRConfig();
+//services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Startup).Assembly));
+//services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
+//builder.Services.AddMediatR(cfg => { cfg.RegisterServicesFromAssemblies([typeof(Program).Assembly, typeof(PackageUniverse.Application.CQRS.BaseHandlerWithDB).Assembly]); });
+
+services.AddApplication();
+
 // Add services to the container.
-builder.Services.AddProblemDetails();
+services.AddProblemDetails();
+
+services.AddCors(options =>
+{
+    options.AddPolicy("AllowSpecificOrigin",
+        builder => builder
+            .WithOrigins("https://localhost:7469")
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+});
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+services.AddOpenApi();
+services.AddEndpointsApiExplorer();
+
+services.AddControllers();
+
+services.AddHttpClient<NuGetPackageCheckerService>();
+services.AddHostedService<NuGetPackageCheckerService>();
 
 var app = builder.Build();
 
@@ -16,30 +59,21 @@ app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {
+    app.UseDeveloperExceptionPage();
     app.MapOpenApi();
+    app.ApplyMigrations();
+    app.MapScalarApiReference();
+    app.MapGet("/", () => Results.Redirect("/scalar/v1")).ExcludeFromDescription();
 }
 
-string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
+app.UseHttpsRedirection();
+app.UseRouting();
+app.UseAuthorization();
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.UseCors("AllowSpecificOrigin");
+
+app.MapControllers();
 
 app.MapDefaultEndpoints();
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

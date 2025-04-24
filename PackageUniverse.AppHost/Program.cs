@@ -48,8 +48,4 @@ builder.AddProject<Projects.PackageUniverse_Web>("webfrontend")
     .WithReference(apiService)
     .WaitFor(apiService);
 
-builder.AddProject<Projects.PackageUniverse_MigrationService>("packageuniverse-migrationservice")
-    .WithReference(postgres)
-    .WaitFor(postgres);
-
 builder.Build().Run();

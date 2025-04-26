@@ -30,7 +30,12 @@ public class Worker(
         }
         catch (Exception ex)
         {
-            activity?.RecordException(ex);
+            activity?.AddEvent(new ActivityEvent("Exception", default, new ActivityTagsCollection
+            {
+                { "exception.type", ex.GetType().FullName },
+                { "exception.message", ex.Message },
+                { "exception.stacktrace", ex.StackTrace }
+            }));
             throw;
         }
 
@@ -49,7 +54,7 @@ public class Worker(
 
     private static async Task SeedDataAsync(PUContext dbContext, CancellationToken cancellationToken)
     {
-      
+
         var strategy = dbContext.Database.CreateExecutionStrategy();
         await strategy.ExecuteAsync(async () =>
         {

@@ -1,41 +1,31 @@
-﻿using PackageUniverse.ApiService.Controllers;
-using PackageUniverse.Application.Interfaces;
+﻿using PackageUniverse.Application.Interfaces;
 using PackageUniverse.Application.Models;
 using PackageUniverse.Application.Models.NuGetModels;
 
 using System.Diagnostics;
-using System.IO;
-using System.IO.Compression;
 using System.Text.Json;
 
 namespace PackageUniverse.ApiService.Services
 {
-    public class NuGetPackageCheckerService : BackgroundService
+    public class NuGetPackageCheckerService(
+        ILogger<NuGetPackageCheckerService> logger,
+        IServiceProvider serviceProvider,
+        HttpClient httpClient)
+        : BackgroundService
     {
-        private readonly ILogger<NuGetPackageCheckerService> _logger;
-        private readonly IServiceProvider _serviceProvider;
-        private readonly HttpClient _httpClient;
-
         private const string NUGET_GET_URI = "https://api.nuget.org/v3/catalog0/index.json";
 
         CatalogListModel? CatalogList = null;
 
-
-        public NuGetPackageCheckerService(ILogger<NuGetPackageCheckerService> logger, IServiceProvider serviceProvider, HttpClient httpClient)
-        {
-            _logger = logger;
-            _serviceProvider = serviceProvider;
-            _httpClient = httpClient;
-        }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             //while (!stoppingToken.IsCancellationRequested)
 
             //{
-            _logger.LogInformation("NuGetPackageCheckerService running at: {time}", DateTimeOffset.Now);
+            logger.LogInformation("NuGetPackageCheckerService running at: {time}", DateTimeOffset.Now);
 
-            using (var scope = _serviceProvider.CreateScope())
+            using (var scope = serviceProvider.CreateScope())
             {
                 var context = scope.ServiceProvider.GetRequiredService<IPUContext>();
 
@@ -47,27 +37,28 @@ namespace PackageUniverse.ApiService.Services
             //}
         }
 
-        private async Task<T> GetFromJSON<T>(string uri) where T : Model
+        private static readonly JsonSerializerOptions CachedJsonSerializerOptions = new()
         {
-            var response = await _httpClient.GetAsync(uri);
+            PropertyNameCaseInsensitive = true
+        };
+
+        private async Task<T> GetFromJson<T>(string uri) where T : Model
+        {
+            var response = await httpClient.GetAsync(uri);
             if (!response.IsSuccessStatusCode)
                 throw new Exception("Не удалось получить данные");
 
-            T? tModel;
+            await using var stream = await response.Content.ReadAsStreamAsync();
+            var reader = new StreamReader(stream);
 
-            using (var stream = await response.Content.ReadAsStreamAsync())
-            {
-                var reader = new StreamReader(stream);
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                tModel = await JsonSerializer.DeserializeAsync<T>(stream, options);
-            }
+            var tModel = await JsonSerializer.DeserializeAsync<T>(stream, CachedJsonSerializerOptions);
 
-            return tModel!;
+            return tModel ?? throw new Exception("Не удалось десериализовать данные");
         }
 
         private async Task CheckForNewPackagesAsync(IPUContext context)
         {
-            CatalogList = await GetFromJSON<CatalogListModel>(NUGET_GET_URI);
+            CatalogList = await GetFromJson<CatalogListModel>(NUGET_GET_URI);
 
             List<CatalogModel> catalogModels = new();
             List<PackageDetailModel> detailPackages = new();
@@ -79,31 +70,34 @@ namespace PackageUniverse.ApiService.Services
                 MaxDegreeOfParallelism = 10000, // Ограничение на количество потоков
             };
 
+
+
+
             await Task.Run(() =>
             {
                 Parallel.ForEach(CatalogList.Items, parallelOptions, catalog =>
                 {
                     try
                     {
-                        var catalogModel = GetFromJSON<CatalogModel>(catalog.Id).Result;
+                        var catalogModel = GetFromJson<CatalogModel>(catalog.Id).Result;
 
                         lock (lockObject)
                         {
                             catalogModels.Add(catalogModel);
                         }
 
-                        
+
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Ошибка при обработке каталога: {CatalogId}", catalog.Id);
+                        logger.LogError(ex, "Ошибка при обработке каталога: {CatalogId}", catalog.Id);
                     }
                 });
                 Parallel.ForEach(catalogModels, parallelOptions, package =>
                 {
                     try
                     {
-                        var packageDetail = GetFromJSON<PackageDetailModel>(package.Id).Result;
+                        var packageDetail = GetFromJson<PackageDetailModel>(package.Id).Result;
 
                         lock (lockObject)
                         {
@@ -112,7 +106,7 @@ namespace PackageUniverse.ApiService.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Ошибка при обработке пакета: {PackageId}", package.Id);
+                        logger.LogError(ex, "Ошибка при обработке пакета: {PackageId}", package.Id);
                     }
                 });
             });

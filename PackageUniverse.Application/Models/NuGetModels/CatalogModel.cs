@@ -117,11 +117,17 @@ namespace PackageUniverse.Application.Models.NuGetModels
         [JsonPropertyName("catalog:commitTimeStamp")]
         public DateTime CatalogCommitTimeStamp { get; set; }
 
+        [JsonPropertyName("copyright")]
+        public string Copyright { get; set; } = string.Empty;
+        
         [JsonPropertyName("created")]
         public DateTime Created { get; set; }
 
         [JsonPropertyName("description")]
         public string Description { get; set; } = string.Empty;
+
+        [JsonPropertyName("iconUrl")]
+        public string IconUrl { get; set; } = string.Empty;
 
         [JsonPropertyName("id")]
         public string PackageId { get; set; } = string.Empty;
@@ -131,6 +137,9 @@ namespace PackageUniverse.Application.Models.NuGetModels
 
         [JsonPropertyName("lastEdited")]
         public DateTime LastEdited { get; set; }
+
+        [JsonPropertyName("licenseUrl")]
+        public string LicenseUrl { get; set; } = string.Empty;
 
         [JsonPropertyName("listed")]
         public bool Listed { get; set; }
@@ -144,8 +153,17 @@ namespace PackageUniverse.Application.Models.NuGetModels
         [JsonPropertyName("packageSize")]
         public int PackageSize { get; set; }
 
+        [JsonPropertyName("projectUrl")]
+        public string ProjectUrl { get; set; } = string.Empty;
+
         [JsonPropertyName("published")]
         public DateTime Published { get; set; }
+
+        [JsonPropertyName("requireLicenseAcceptance")]
+        public bool RequireLicenseAcceptance { get; set; }
+
+        [JsonPropertyName("serviceable")]
+        public string Serviceable { get; set; } = string.Empty;
 
         [JsonPropertyName("verbatimVersion")]
         public string VerbatimVersion { get; set; } = string.Empty;
@@ -158,7 +176,11 @@ namespace PackageUniverse.Application.Models.NuGetModels
 
         [JsonPropertyName("packageEntries")]
         public List<PackageEntry> PackageEntries { get; set; } = new();
+
+        [JsonPropertyName("tags")]
+        public List<string> Tags { get; set; } = new();
     }
+
     public class DependencyGroup : Model
     {
         [JsonPropertyName("@id")]
@@ -208,7 +230,6 @@ namespace PackageUniverse.Application.Models.NuGetModels
 
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
-
     }
     #endregion
 }

@@ -1,10 +1,6 @@
-using Microsoft.EntityFrameworkCore;
-
-using OpenTelemetry.Trace;
-
-using PackageUniverse.Infrastructure.Data;
-
 using System.Diagnostics;
+using Microsoft.EntityFrameworkCore;
+using PackageUniverse.Infrastructure.Data;
 
 namespace PackageUniverse.MigrationService;
 
@@ -54,7 +50,6 @@ public class Worker(
 
     private static async Task SeedDataAsync(PUContext dbContext, CancellationToken cancellationToken)
     {
-
         var strategy = dbContext.Database.CreateExecutionStrategy();
         await strategy.ExecuteAsync(async () =>
         {

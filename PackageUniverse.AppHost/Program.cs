@@ -1,9 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
-
-using StackExchange.Redis;
-
-using System.Net.Sockets;
-
+using Projects;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -33,16 +28,16 @@ var postgres = builder.AddPostgres("postgres", password: dbPassword, port: 5432)
 var postgresdb = postgres.AddDatabase("packagedb");
 
 
-builder.AddProject<Projects.PackageUniverse_MigrationService>("migrations")
+builder.AddProject<PackageUniverse_MigrationService>("migrations")
     .WithReference(postgres)
     .WaitFor(postgres);
 
 #endregion
 
-var apiService = builder.AddProject<Projects.PackageUniverse_ApiService>("apiservice")
- .WithReference(postgresdb).WaitFor(postgresdb);
+var apiService = builder.AddProject<PackageUniverse_ApiService>("apiservice")
+    .WithReference(postgresdb).WaitFor(postgresdb);
 
-builder.AddProject<Projects.PackageUniverse_Web>("webfrontend")
+builder.AddProject<PackageUniverse_Web>("webfrontend")
     .WithExternalHttpEndpoints()
     .WithReference(cache)
     .WaitFor(cache)

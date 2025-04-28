@@ -1,87 +1,77 @@
 ﻿using Microsoft.EntityFrameworkCore;
-
 using PackageUniverse.Application.Interfaces;
 using PackageUniverse.Core.Entities;
 using PackageUniverse.Infrastructure.Exceptions;
 
-namespace PackageUniverse.Infrastructure.Data
+namespace PackageUniverse.Infrastructure.Data;
+
+public sealed class PUContext(DbContextOptions options)
+    : DbContext(options), IPUContext
 {
-    public sealed class PUContext(DbContextOptions options)
-        : DbContext(options), IPUContext
+    public DbSet<PackageDependency> PackageDependencies { get; set; } = null!;
+    public DbSet<Package> Packages { get; set; } = null!;
+
+    public override int SaveChanges()
     {
-        public DbSet<Package> Packages { get; set; } = null!;
-        public DbSet<PackageDependency> PackageDependencies { get; set; } = null!;
+        var entries = ChangeTracker
+            .Entries()
+            .Where(e => e.Entity is Entity && (
+                e.State == EntityState.Added
+                || e.State == EntityState.Modified));
 
-        protected override void OnModelCreating(ModelBuilder builder)
+        foreach (var entityEntry in entries)
         {
-            builder.ApplyConfigurationsFromAssembly(this.GetType().Assembly);
-            base.OnModelCreating(builder);
+            ((Entity)entityEntry.Entity).DateUpdated = DateTime.UtcNow;
+
+            if (entityEntry.State == EntityState.Added) ((Entity)entityEntry.Entity).DateCreated = DateTime.UtcNow;
         }
 
-        public override int SaveChanges()
+        try
         {
-            var entries = ChangeTracker
-                .Entries()
-                .Where(e => e.Entity is Entity && (
-                        e.State == EntityState.Added
-                        || e.State == EntityState.Modified));
+            return base.SaveChanges();
+        }
+        catch (DbUpdateException ex)
+        {
+            throw new InfrastructureException($"Failed to save in DataBase {ex.Message}");
+        }
+    }
 
-            foreach (var entityEntry in entries)
-            {
-                ((Entity)entityEntry.Entity).DateUpdated = DateTime.UtcNow;
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        var entries = ChangeTracker
+            .Entries()
+            .Where(e => e.Entity is Entity && (
+                e.State == EntityState.Added ||
+                e.State == EntityState.Modified));
 
-                if (entityEntry.State == EntityState.Added)
-                {
-                    ((Entity)entityEntry.Entity).DateCreated = DateTime.UtcNow;
-                }
-            }
+        foreach (var entityEntry in entries)
+        {
+            ((Entity)entityEntry.Entity).DateUpdated = DateTime.UtcNow;
 
-            try
-            {
-                return base.SaveChanges();
-            }
-            catch (DbUpdateException ex)
-            {
-                throw new InfrastructureException($"Failed to save in DataBase {ex.Message}");
-            }
-
+            if (entityEntry.State == EntityState.Added) ((Entity)entityEntry.Entity).DateCreated = DateTime.UtcNow;
         }
 
-        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        try
         {
-            var entries = ChangeTracker
-                .Entries()
-                .Where(e => e.Entity is Entity && (
-                        e.State == EntityState.Added ||
-                        e.State == EntityState.Modified));
-
-            foreach (var entityEntry in entries)
-            {
-                ((Entity)entityEntry.Entity).DateUpdated = DateTime.UtcNow;
-
-                if (entityEntry.State == EntityState.Added)
-                {
-                    ((Entity)entityEntry.Entity).DateCreated = DateTime.UtcNow;
-                }
-            }
-            try
-            {
-                return base.SaveChangesAsync(cancellationToken);
-            }
-            catch (DbUpdateConcurrencyException ex)
-            {
-                throw new InfrastructureException($"Failed to save in DataBase {ex.Message}");
-            }
-            catch (DbUpdateException ex)
-            {
-                throw new InfrastructureException($"Failed to save in DataBase {ex.Message}");
-            }
-            catch (OperationCanceledException ex)
-            {
-                throw new InfrastructureException($"Failed to save in DataBase {ex.Message}");
-            }
+            return base.SaveChangesAsync(cancellationToken);
         }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            throw new InfrastructureException($"Failed to save in DataBase {ex.Message}");
+        }
+        catch (DbUpdateException ex)
+        {
+            throw new InfrastructureException($"Failed to save in DataBase {ex.Message}");
+        }
+        catch (OperationCanceledException ex)
+        {
+            throw new InfrastructureException($"Failed to save in DataBase {ex.Message}");
+        }
+    }
 
-
+    protected override void OnModelCreating(ModelBuilder builder)
+    {
+        builder.ApplyConfigurationsFromAssembly(GetType().Assembly);
+        base.OnModelCreating(builder);
     }
 }

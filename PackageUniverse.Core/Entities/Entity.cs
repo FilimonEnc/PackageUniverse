@@ -1,18 +1,12 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace PackageUniverse.Core.Entities
+namespace PackageUniverse.Core.Entities;
+
+public class Entity
 {
-    public class Entity
-    {
-        [Key]
-        public int Id { get; set; }
+    [Key] public int Id { get; set; }
 
-        [Required]
-        public DateTime DateCreated { get; set; }
+    [Required] public DateTime DateCreated { get; set; }
 
-        [Required]
-        public DateTime DateUpdated { get; set; }
-
-
-    }
+    [Required] public DateTime DateUpdated { get; set; }
 }

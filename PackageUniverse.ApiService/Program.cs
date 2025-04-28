@@ -1,16 +1,9 @@
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-
+using PackageUniverse.ApiService.Extensions;
 using PackageUniverse.ApiService.Services;
 using PackageUniverse.Application;
-using PackageUniverse.Application.CQRS.Packages.Queries.GetPackages;
 using PackageUniverse.Application.Interfaces;
 using PackageUniverse.Infrastructure.Data;
-
 using Scalar.AspNetCore;
-
-using System.Reflection;
-
 using UrlShortener.Api.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,10 +11,16 @@ var builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 
-builder.AddNpgsqlDbContext<PUContext>(connectionName: "packagedb");
+//БД
+builder.AddNpgsqlDbContext<PUContext>("packagedb");
+
+//Валидатоция ответов HTTP
+builder.Services.AddHttpResponseValidation();
 
 var services = builder.Services;
 
+
+//Контекст БД
 services.AddScoped<IPUContext, PUContext>();
 
 

@@ -1,6 +1,5 @@
-﻿namespace PackageUniverse.Application.Models
+﻿namespace PackageUniverse.Application.Models;
+
+public class Model
 {
-    public class Model
-    {
-    }
 }

@@ -1,14 +1,12 @@
-﻿using PackageUniverse.Application.Mapping.Configuration;
+﻿using Mapster;
+using PackageUniverse.Application.Mapping.Configuration;
 
-using Mapster;
+namespace PackageUniverse.Application.Mapping;
 
-namespace PackageUniverse.Application.Mapping
+public class MapRegister : IRegister
 {
-    public class MapRegister : IRegister
+    public void Register(TypeAdapterConfig config)
     {
-        public void Register(TypeAdapterConfig config)
-        {
-            PackageUniverseMappingConfiguration.Configure(config);
-        }
+        PackageUniverseMappingConfiguration.Configure(config);
     }
 }

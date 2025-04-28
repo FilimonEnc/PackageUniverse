@@ -1,9 +1,9 @@
-using PackageUniverse.MigrationService;
 using PackageUniverse.Infrastructure.Data;
+using PackageUniverse.MigrationService;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+builder.Configuration.AddJsonFile("appsettings.json", false, true);
 
 
 builder.AddServiceDefaults();

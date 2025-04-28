@@ -1,15 +1,14 @@
-﻿namespace PackageUniverse.Application.Exceptions
-{
-    public class BadRequestException : Exception
-    {
-        public BadRequestException(string businessMessage)
-            : base(businessMessage)
-        {
-        }
+﻿namespace PackageUniverse.Application.Exceptions;
 
-        public BadRequestException(string message, Exception innerException)
-            : base(message, innerException)
-        {
-        }
+public class BadRequestException : Exception
+{
+    public BadRequestException(string businessMessage)
+        : base(businessMessage)
+    {
+    }
+
+    public BadRequestException(string message, Exception innerException)
+        : base(message, innerException)
+    {
     }
 }

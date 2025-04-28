@@ -13,7 +13,8 @@ public static class ApplicationBuilderExtensions
 
         if (context == null)
         {
-            logger?.LogError("The database context of type {DbContextType} could not be resolved.", typeof(TDbContext).Name);
+            logger?.LogError("The database context of type {DbContextType} could not be resolved.",
+                typeof(TDbContext).Name);
             return;
         }
 

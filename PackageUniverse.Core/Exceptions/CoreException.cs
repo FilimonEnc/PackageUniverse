@@ -1,15 +1,14 @@
-﻿namespace PackageUniverse.Core.Exceptions
-{
-    public class CoreException : Exception
-    {
-        public CoreException(string businessMessage)
-            : base(businessMessage)
-        {
-        }
+﻿namespace PackageUniverse.Core.Exceptions;
 
-        public CoreException(string message, Exception innerException)
-            : base(message, innerException)
-        {
-        }
+public class CoreException : Exception
+{
+    public CoreException(string businessMessage)
+        : base(businessMessage)
+    {
+    }
+
+    public CoreException(string message, Exception innerException)
+        : base(message, innerException)
+    {
     }
 }

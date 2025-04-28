@@ -1,20 +1,19 @@
-﻿namespace PackageUniverse.Application.Exceptions
+﻿namespace PackageUniverse.Application.Exceptions;
+
+public class ForbiddenException : Exception
 {
-    public class ForbiddenException : Exception
+    public ForbiddenException()
+        : base("Недостаточно прав для выполнения данной команды")
     {
-        public ForbiddenException()
-               : base("Недостаточно прав для выполнения данной команды")
-        {
-        }
+    }
 
-        public ForbiddenException(string businessMessage)
-               : base(businessMessage)
-        {
-        }
+    public ForbiddenException(string businessMessage)
+        : base(businessMessage)
+    {
+    }
 
-        public ForbiddenException(string message, Exception innerException)
-            : base(message, innerException)
-        {
-        }
+    public ForbiddenException(string message, Exception innerException)
+        : base(message, innerException)
+    {
     }
 }

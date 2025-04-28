@@ -1,7 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using PackageUniverse.Infrastructure.Data;
 
-namespace UrlShortener.Api.Extensions;
+namespace PackageUniverse.ApiService.Extensions;
 
 public static class PostgreSqlExtensions
 {

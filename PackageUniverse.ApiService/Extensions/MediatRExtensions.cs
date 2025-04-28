@@ -1,4 +1,4 @@
-﻿namespace UrlShortener.Api.Extensions;
+﻿namespace PackageUniverse.ApiService.Extensions;
 
 public static class MediatRExtensions
 {

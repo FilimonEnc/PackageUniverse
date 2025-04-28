@@ -4,7 +4,6 @@ using PackageUniverse.Application;
 using PackageUniverse.Application.Interfaces;
 using PackageUniverse.Infrastructure.Data;
 using Scalar.AspNetCore;
-using UrlShortener.Api.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 

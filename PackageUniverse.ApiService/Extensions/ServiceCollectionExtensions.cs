@@ -14,8 +14,7 @@ public static class ServiceCollectionExtensions
         var types = Assembly.GetAssembly(validatorType)!
             .GetTypes()
             .Where(t => validatorType.IsAssignableFrom(t)
-                        && t.IsClass
-                        && !t.IsAbstract);
+                        && t is { IsClass: true, IsAbstract: false });
 
         foreach (var impl in types)
         {

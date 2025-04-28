@@ -1,7 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
-
 using PackageUniverse.ApiService.Validators;
 using PackageUniverse.Application.Interfaces;
 using PackageUniverse.Application.Models;
@@ -65,7 +64,7 @@ public class NuGetPackageCheckerService(
 
     private async Task CheckForNewPackagesAsync(IPUContext context)
     {
-        CatalogListModel catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri);
+        var catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri);
 
         List<PackageDetailModel> detailPackages = new();
         ConcurrentBag<CatalogModel> concurrentCatalogModels = new();
@@ -93,16 +92,12 @@ public class NuGetPackageCheckerService(
                 }
             });
             await using StreamWriter sw = new("C:\\Users\\diego\\Desktop\\catalogs.txt");
-            foreach (var catalogModel in concurrentCatalogModels)
-            {
-                await sw.WriteLineAsync(catalogModel.Id);
-            }
-            
+            foreach (var catalogModel in concurrentCatalogModels) await sw.WriteLineAsync(catalogModel.Id);
+
             // Обработка пакетов
             Parallel.ForEach(concurrentCatalogModels, parallelOptions, catalogModel =>
             {
                 foreach (var package in catalogModel.Items)
-                {
                     try
                     {
                         var packageDetail = GetFromJson<PackageDetailModel>(package.Id).Result;
@@ -112,7 +107,6 @@ public class NuGetPackageCheckerService(
                     {
                         logger.LogError(ex, "Ошибка при обработке пакета: {PackageId}", catalogModel.Id);
                     }
-                }
             });
 
             // Перенос данных из ConcurrentBag в List

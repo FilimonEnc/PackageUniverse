@@ -7,21 +7,21 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\PackageUniverse.Application\PackageUniverse.Application.csproj" />
-        <ProjectReference Include="..\PackageUniverse.ServiceDefaults\PackageUniverse.ServiceDefaults.csproj" />
-        <ProjectReference Include="..\PackageUniverse.Infrastructure\PackageUniverse.Infrastructure.csproj" />
+        <ProjectReference Include="..\PackageUniverse.Application\PackageUniverse.Application.csproj"/>
+        <ProjectReference Include="..\PackageUniverse.ServiceDefaults\PackageUniverse.ServiceDefaults.csproj"/>
+        <ProjectReference Include="..\PackageUniverse.Infrastructure\PackageUniverse.Infrastructure.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.4" />
-        <PackageReference Include="Aspire.Hosting.AppHost" Version="9.2.0" />
-        <PackageReference Include="Aspire.Hosting.Redis" Version="9.2.0" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.4"/>
+        <PackageReference Include="Aspire.Hosting.AppHost" Version="9.2.0"/>
+        <PackageReference Include="Aspire.Hosting.Redis" Version="9.2.0"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.4">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.1.18" />
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
+        <PackageReference Include="Scalar.AspNetCore" Version="2.1.18"/>
     </ItemGroup>
 
 </Project>

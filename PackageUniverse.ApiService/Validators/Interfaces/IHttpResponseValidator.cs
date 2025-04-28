@@ -1,7 +1,6 @@
-﻿namespace PackageUniverse.ApiService.Validators.Interfaces
+﻿namespace PackageUniverse.ApiService.Validators.Interfaces;
+
+public interface IHttpResponseValidator
 {
-    public interface IHttpResponseValidator
-    {
-        Task ValidateAsync(HttpResponseMessage response, string uri);
-    }
+    Task ValidateAsync(HttpResponseMessage response, string uri);
 }

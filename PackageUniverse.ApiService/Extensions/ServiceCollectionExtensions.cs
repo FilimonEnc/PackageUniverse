@@ -16,10 +16,7 @@ public static class ServiceCollectionExtensions
             .Where(t => validatorType.IsAssignableFrom(t)
                         && t is { IsClass: true, IsAbstract: false });
 
-        foreach (var impl in types)
-        {
-            services.AddScoped(typeof(IHttpResponseValidator), impl);
-        }
+        foreach (var impl in types) services.AddScoped(typeof(IHttpResponseValidator), impl);
 
         return services;
     }

@@ -1,4 +1,5 @@
-﻿using PackageUniverse.Application.Interfaces;
+﻿using System.Collections.Concurrent;
+using PackageUniverse.Application.Interfaces;
 using PackageUniverse.Application.Models;
 using PackageUniverse.Application.Models.NuGetModels;
 
@@ -10,12 +11,14 @@ namespace PackageUniverse.ApiService.Services
     public class NuGetPackageCheckerService(
         ILogger<NuGetPackageCheckerService> logger,
         IServiceProvider serviceProvider,
-        HttpClient httpClient)
+        HttpClient httpClient,
+        IConfiguration configuration)
         : BackgroundService
     {
-        private const string NUGET_GET_URI = "https://api.nuget.org/v3/catalog0/index.json";
 
-        CatalogListModel? CatalogList = null;
+        private string NuGetGetUri => configuration["NuGet:CatalogsUri"] ?? throw new InvalidOperationException("NuGet Catalog URI is not configured.");
+
+        private CatalogListModel? _catalogList = null;
 
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -23,7 +26,7 @@ namespace PackageUniverse.ApiService.Services
             //while (!stoppingToken.IsCancellationRequested)
 
             //{
-            logger.LogInformation("NuGetPackageCheckerService running at: {time}", DateTimeOffset.Now);
+            logger.LogInformation("NuGetPackageCheckerService running at: {Time}", DateTimeOffset.Now);
 
             using (var scope = serviceProvider.CreateScope())
             {
@@ -46,70 +49,68 @@ namespace PackageUniverse.ApiService.Services
         {
             var response = await httpClient.GetAsync(uri);
             if (!response.IsSuccessStatusCode)
-                throw new Exception("Не удалось получить данные");
+                throw new ArgumentNullException(nameof(uri), "Не удалось получить данные");
 
             await using var stream = await response.Content.ReadAsStreamAsync();
-            var reader = new StreamReader(stream);
 
             var tModel = await JsonSerializer.DeserializeAsync<T>(stream, CachedJsonSerializerOptions);
 
-            return tModel ?? throw new Exception("Не удалось десериализовать данные");
+            return tModel ?? throw new ArgumentNullException(nameof(uri), "Не удалось десериализовать данные");
         }
 
         private async Task CheckForNewPackagesAsync(IPUContext context)
         {
-            CatalogList = await GetFromJson<CatalogListModel>(NUGET_GET_URI);
+            _catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri);
 
-            List<CatalogModel> catalogModels = new();
             List<PackageDetailModel> detailPackages = new();
-            object lockObject = new(); // Для синхронизации доступа к общим ресурсам
+            ConcurrentBag<CatalogModel> concurrentCatalogModels = new();
+            ConcurrentBag<PackageDetailModel> concurrentDetailPackages = new();
 
-            // Обработка CatalogList.Items с использованием 500 потоков
+            // Обработка CatalogList.Items с использованием Parallel.ForEach
             ParallelOptions parallelOptions = new()
             {
-                MaxDegreeOfParallelism = 10000, // Ограничение на количество потоков
+                MaxDegreeOfParallelism = Environment.ProcessorCount * 2 // Оптимальное количество потоков
             };
 
-
-
-
-            await Task.Run(() =>
+            try
             {
-                Parallel.ForEach(CatalogList.Items, parallelOptions, catalog =>
+                // Обработка каталогов
+                Parallel.ForEach(_catalogList.Items, parallelOptions, catalog =>
                 {
                     try
                     {
                         var catalogModel = GetFromJson<CatalogModel>(catalog.Id).Result;
-
-                        lock (lockObject)
-                        {
-                            catalogModels.Add(catalogModel);
-                        }
-
-
+                        concurrentCatalogModels.Add(catalogModel);
                     }
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "Ошибка при обработке каталога: {CatalogId}", catalog.Id);
                     }
                 });
-                Parallel.ForEach(catalogModels, parallelOptions, package =>
+
+                // Обработка пакетов
+                Parallel.ForEach(concurrentCatalogModels, parallelOptions, catalogModel =>
                 {
                     try
                     {
-                        var packageDetail = GetFromJson<PackageDetailModel>(package.Id).Result;
-
-                        lock (lockObject)
-                        {
-                            detailPackages.Add(packageDetail);
-                        }
+                        var packageDetail = GetFromJson<PackageDetailModel>(catalogModel.Id).Result;
+                        concurrentDetailPackages.Add(packageDetail);
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Ошибка при обработке пакета: {PackageId}", package.Id);
+                        logger.LogError(ex, "Ошибка при обработке пакета: {PackageId}", catalogModel.Id);
                     }
                 });
-            });
+
+                // Перенос данных из ConcurrentBag в List
+                detailPackages.AddRange(concurrentDetailPackages);
+            }
+            catch (AggregateException ex)
+            {
+                logger.LogError(ex, "Ошибка в процессе параллельной обработки.");
+            }
+
+
 
             Debug.WriteLine("Получено {0} пакетов", detailPackages.Count);
 

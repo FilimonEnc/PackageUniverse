@@ -24,10 +24,6 @@ var services = builder.Services;
 
 services.AddScoped<IPUContext, PUContext>();
 
-//services.AddMediatRConfig();
-//services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Startup).Assembly));
-//services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
-//builder.Services.AddMediatR(cfg => { cfg.RegisterServicesFromAssemblies([typeof(Program).Assembly, typeof(PackageUniverse.Application.CQRS.BaseHandlerWithDB).Assembly]); });
 
 services.AddApplication();
 
@@ -76,4 +72,6 @@ app.MapControllers();
 
 app.MapDefaultEndpoints();
 
+#pragma warning disable S6966
 app.Run();
+#pragma warning restore S6966

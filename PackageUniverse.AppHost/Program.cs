@@ -32,6 +32,7 @@ var postgres = builder.AddPostgres("postgres", password: dbPassword, port: 5432)
 
 var postgresdb = postgres.AddDatabase("packagedb");
 
+
 builder.AddProject<Projects.PackageUniverse_MigrationService>("migrations")
     .WithReference(postgres)
     .WaitFor(postgres);

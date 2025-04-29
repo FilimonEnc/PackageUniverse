@@ -4,8 +4,12 @@ namespace PackageUniverse.ApiService.Validators;
 
 public class HttpResponseValidationPipeline(IEnumerable<IHttpResponseValidator> validators)
 {
-    public async Task ValidateAsync(HttpResponseMessage response, string uri)
+    public async Task ValidateAsync(HttpValidationContext context, IEnumerable<HttpValidationTag> activeTags)
     {
-        foreach (var validator in validators) await validator.ValidateAsync(response, uri);
+        var tagSet = new HashSet<HttpValidationTag>(activeTags);
+
+        foreach (var validator in validators)
+            if (validator.Tags.Overlaps(tagSet))
+                await validator.ValidateAsync(context);
     }
 }

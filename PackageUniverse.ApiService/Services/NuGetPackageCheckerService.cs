@@ -12,14 +12,16 @@ public class NuGetPackageCheckerService(
     ILogger<NuGetPackageCheckerService> logger,
     IServiceProvider serviceProvider,
     HttpClient httpClient,
-    IConfiguration configuration,
-    HttpResponseValidationPipeline validationPipeline)
-    : BackgroundService
+    IConfiguration configuration) : BackgroundService
+
 {
     private static readonly JsonSerializerOptions CachedJsonSerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
+
+    private IPUContext? _context;
+    private HttpResponseValidationPipeline? _pipeline;
 
 
     private string NuGetGetUri => configuration["NuGet:CatalogsUri"] ??
@@ -28,31 +30,32 @@ public class NuGetPackageCheckerService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        //while (!stoppingToken.IsCancellationRequested)
-
-        //{
         logger.LogInformation("NuGetPackageCheckerService running at: {Time}", DateTimeOffset.Now);
 
-        using (var scope = serviceProvider.CreateScope())
-        {
-            var context = scope.ServiceProvider.GetRequiredService<IPUContext>();
+        using var scope = serviceProvider.CreateScope();
 
-            await CheckForNewPackagesAsync(context);
-        }
+        _context = scope.ServiceProvider.GetRequiredService<IPUContext>();
+        _pipeline = scope.ServiceProvider.GetRequiredService<HttpResponseValidationPipeline>();
 
-        // Ожидание 24 часа перед следующей проверкой
-        await Task.Delay(TimeSpan.FromDays(1), stoppingToken);
-        //}
+        await CheckForNewPackagesAsync();
+
+        //await Task.Delay(TimeSpan.FromDays(1), stoppingToken);
     }
+
 
     private async Task<T> GetFromJson<T>(string uri) where T : Model
     {
         if (string.IsNullOrWhiteSpace(uri))
             throw new ArgumentException("Параметр URI не может быть пустым.", nameof(uri));
+        if (_pipeline is null)
+            throw new InvalidOperationException("Validation pipeline is not initialized");
 
         var response = await httpClient.GetAsync(uri);
 
-        await validationPipeline.ValidateAsync(response, uri);
+        await _pipeline.ValidateAsync(
+            new HttpValidationContext(response, uri),
+            [HttpValidationTag.ExpectBody, HttpValidationTag.Get]
+        );
 
         await using var stream = await response.Content.ReadAsStreamAsync();
 
@@ -62,8 +65,11 @@ public class NuGetPackageCheckerService(
     }
 
 
-    private async Task CheckForNewPackagesAsync(IPUContext context)
+    private async Task CheckForNewPackagesAsync()
     {
+        if (_context is null)
+            throw new InvalidOperationException("Context is not initialized");
+
         var catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri);
 
         List<PackageDetailModel> detailPackages = new();
@@ -111,6 +117,8 @@ public class NuGetPackageCheckerService(
 
             // Перенос данных из ConcurrentBag в List
             detailPackages.AddRange(concurrentDetailPackages);
+            await using StreamWriter sww = new("C:\\Users\\diego\\Desktop\\packages.txt");
+            foreach (var package in detailPackages) await sww.WriteLineAsync(package.Id);
         }
         catch (AggregateException ex)
         {
@@ -157,6 +165,7 @@ public class NuGetPackageCheckerService(
         //            _logger.LogError("Failed to deserialize NuGet package data");
         //            return;
         //        }
+        //}
         //}
     }
 }

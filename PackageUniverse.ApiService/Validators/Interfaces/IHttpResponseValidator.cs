@@ -2,5 +2,7 @@
 
 public interface IHttpResponseValidator
 {
-    Task ValidateAsync(HttpResponseMessage response, string uri);
+    ISet<HttpValidationTag> Tags { get; }
+
+    Task ValidateAsync(HttpValidationContext context);
 }

@@ -1,10 +1,13 @@
 ﻿using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Text.Json;
+using Mapster;
+using Microsoft.EntityFrameworkCore;
+using PackageUniverse.ApiService.Utils;
 using PackageUniverse.ApiService.Validators;
 using PackageUniverse.Application.Interfaces;
 using PackageUniverse.Application.Models;
 using PackageUniverse.Application.Models.NuGetModels;
+using PackageUniverse.Core.Entities;
 
 namespace PackageUniverse.ApiService.Services;
 
@@ -13,159 +16,164 @@ public class NuGetPackageCheckerService(
     IServiceProvider serviceProvider,
     HttpClient httpClient,
     IConfiguration configuration) : BackgroundService
-
 {
     private static readonly JsonSerializerOptions CachedJsonSerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    private IPUContext? _context;
+    private readonly List<Func<Task>> _deferredDependencySaves = new();
+
+    private IPUContext _context = null!;
     private HttpResponseValidationPipeline? _pipeline;
 
-
-    private string NuGetGetUri => configuration["NuGet:CatalogsUri"] ??
-                                  throw new InvalidOperationException("NuGet Catalog URI is not configured.");
-
+    private string NuGetGetUri => configuration["NuGet:CatalogsUri"]
+                                  ?? throw new InvalidOperationException("NuGet Catalog URI не сконфигурирована.");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("NuGetPackageCheckerService running at: {Time}", DateTimeOffset.Now);
-
         using var scope = serviceProvider.CreateScope();
-
         _context = scope.ServiceProvider.GetRequiredService<IPUContext>();
         _pipeline = scope.ServiceProvider.GetRequiredService<HttpResponseValidationPipeline>();
 
         await CheckForNewPackagesAsync();
-
-        //await Task.Delay(TimeSpan.FromDays(1), stoppingToken);
     }
 
+
+    private async Task CheckForNewPackagesAsync()
+    {
+        if (_context is null) throw new InvalidOperationException("Context не инициализирован");
+
+        var catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri);
+
+        foreach (var pageBatch in catalogList.Items.Chunk(4000)) // CatalogPage
+            await ProcessCatalogPagesAsync(pageBatch); // по 4000 мета-страниц за раз
+    }
+
+    private async Task ProcessCatalogPagesAsync(IEnumerable<CatalogPage> batch)
+    {
+        var catalogs = new ConcurrentBag<CatalogModel>();
+
+        await BatchProcessor.ForEachAsync(batch, 16, async page =>
+        {
+            var catalog = await GetFromJson<CatalogModel>(page.NuGetUri);
+            catalogs.Add(catalog);
+        }, logger);
+
+
+        await ProcessPackageBatchesAsync(catalogs);
+    }
+
+    private async Task ProcessPackageBatchesAsync(IEnumerable<CatalogModel> catalogs)
+    {
+        var allUris = catalogs.SelectMany(c => c.Items.Select(p => p.NuGetUri)).ToList();
+        var throttle = new SemaphoreSlim(16);
+
+        foreach (var batch in allUris.Chunk(4000))
+        {
+            var tasks = batch.Select(async uri =>
+            {
+                await throttle.WaitAsync();
+                try
+                {
+                    var pkg = await GetFromJson<PackageDetailModel>(uri); // получаем данные о пакете
+                    //сохраняем пакет в БД
+                    await SavePackageDetailAsync(pkg);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Ошибка при обработке пакета: {PackageId}", uri);
+                }
+                finally
+                {
+                    throttle.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks); // ждем завершения всех запросов в батче
+
+            foreach (var saveDependency in
+                     _deferredDependencySaves) await saveDependency(); // исполняем отложенные добавления зависимостей
+
+            await _context.SaveChangesAsync(); // итоговый flush
+        }
+    }
+
+    private async Task SavePackageDetailAsync(PackageDetailModel pkg)
+    {
+        // 1. Найти или создать основной Package
+        var packageEntity = await _context.Packages
+            .FirstOrDefaultAsync(p => p.NugetId == pkg.PackageId);
+
+        if (packageEntity == null)
+        {
+            packageEntity = pkg.Adapt<Package>();
+            _context.Packages.Add(packageEntity);
+            await _context.SaveChangesAsync(); // получаем ID
+        }
+
+        // 2. Найти или создать конкретную версию
+        var versionEntity = await _context.PackageVersions
+            .FirstOrDefaultAsync(v =>
+                v.PackageId == packageEntity.Id &&
+                v.Version == pkg.Version);
+
+        if (versionEntity == null)
+        {
+            versionEntity = pkg.Adapt<PackageVersion>();
+            versionEntity.PackageId = packageEntity.Id; // Здесь используем правильный тип (int)
+
+
+            _context.PackageVersions.Add(versionEntity);
+            await _context.SaveChangesAsync(); // получаем ID для зависимостей
+        }
+
+        // 3. Отложенная обработка зависимостей
+        foreach (var group in pkg.DependencyGroups)
+        foreach (var dep in group.Dependencies)
+            _deferredDependencySaves.Add(async () =>
+            {
+                var targetPackage = await _context.Packages
+                    .FirstOrDefaultAsync(p => p.NugetId == dep.DependencyId);
+
+                if (targetPackage == null)
+                {
+                    logger.LogWarning("Пропущена зависимость. Пакет {DepId} не найден", dep.DependencyId);
+                    return;
+                }
+
+                var alreadyExists = await _context.PackageDependencies.AnyAsync(d =>
+                    d.SourceVersionId == versionEntity.Id &&
+                    d.TargetPackageId == targetPackage.Id &&
+                    d.TargetVersionRange == dep.Range &&
+                    d.TargetFramework == group.TargetFramework);
+
+                if (!alreadyExists)
+                {
+                    var dependency = dep.Adapt<PackageDependency>();
+                    dependency.SourceVersionId = versionEntity.Id;
+                    dependency.TargetPackageId = targetPackage.Id;
+                    dependency.TargetFramework = group.TargetFramework;
+
+                    _context.PackageDependencies.Add(dependency);
+                }
+            });
+    }
 
     private async Task<T> GetFromJson<T>(string uri) where T : Model
     {
         if (string.IsNullOrWhiteSpace(uri))
             throw new ArgumentException("Параметр URI не может быть пустым.", nameof(uri));
         if (_pipeline is null)
-            throw new InvalidOperationException("Validation pipeline is not initialized");
+            throw new InvalidOperationException("Validation pipeline не инициализирован.");
 
         var response = await httpClient.GetAsync(uri);
-
-        await _pipeline.ValidateAsync(
-            new HttpValidationContext(response, uri),
-            [HttpValidationTag.ExpectBody, HttpValidationTag.Get]
-        );
+        await _pipeline.ValidateAsync(new HttpValidationContext(response, uri),
+            [HttpValidationTag.ExpectBody, HttpValidationTag.Get]);
 
         await using var stream = await response.Content.ReadAsStreamAsync();
-
         var tModel = await JsonSerializer.DeserializeAsync<T>(stream, CachedJsonSerializerOptions);
-
         return tModel ?? throw new JsonException($"Не удалось десериализовать объект типа {typeof(T).Name} из {uri}");
-    }
-
-
-    private async Task CheckForNewPackagesAsync()
-    {
-        if (_context is null)
-            throw new InvalidOperationException("Context is not initialized");
-
-        var catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri);
-
-        List<PackageDetailModel> detailPackages = new();
-        ConcurrentBag<CatalogModel> concurrentCatalogModels = new();
-        ConcurrentBag<PackageDetailModel> concurrentDetailPackages = new();
-
-        // Обработка CatalogList.Items с использованием Parallel.ForEach
-        ParallelOptions parallelOptions = new()
-        {
-            MaxDegreeOfParallelism = Environment.ProcessorCount * 2 // Оптимальное количество потоков
-        };
-
-        try
-        {
-            // Обработка каталогов
-            Parallel.ForEach(catalogList.Items, parallelOptions, catalog =>
-            {
-                try
-                {
-                    var catalogModel = GetFromJson<CatalogModel>(catalog.Id).Result;
-                    concurrentCatalogModels.Add(catalogModel);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Ошибка при обработке каталога: {CatalogId}", catalog.Id);
-                }
-            });
-            await using StreamWriter sw = new("C:\\Users\\diego\\Desktop\\catalogs.txt");
-            foreach (var catalogModel in concurrentCatalogModels) await sw.WriteLineAsync(catalogModel.Id);
-
-            // Обработка пакетов
-            Parallel.ForEach(concurrentCatalogModels, parallelOptions, catalogModel =>
-            {
-                foreach (var package in catalogModel.Items)
-                    try
-                    {
-                        var packageDetail = GetFromJson<PackageDetailModel>(package.Id).Result;
-                        concurrentDetailPackages.Add(packageDetail);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Ошибка при обработке пакета: {PackageId}", catalogModel.Id);
-                    }
-            });
-
-            // Перенос данных из ConcurrentBag в List
-            detailPackages.AddRange(concurrentDetailPackages);
-            await using StreamWriter sww = new("C:\\Users\\diego\\Desktop\\packages.txt");
-            foreach (var package in detailPackages) await sww.WriteLineAsync(package.Id);
-        }
-        catch (AggregateException ex)
-        {
-            logger.LogError(ex, "Ошибка в процессе параллельной обработки.");
-        }
-
-
-        Debug.WriteLine("Получено {0} пакетов", detailPackages.Count);
-
-        //foreach (var packageDetail in detailPackages)
-        //{
-        //        var newPackage = new Package
-        //        {
-        //            Name = packageDetail.CatalogEntry.Id,
-        //            Description = packageDetail.CatalogEntry.Description,
-        //            IsRecommended = false, 
-        //        };
-        //        if (packageDetail.CatalogEntry.DependencyGroups.Count > 0)
-        //            newPackage.Dependencies = packageDetail.CatalogEntry.DependencyGroups.SelectMany(dg => dg.Dependencies).Select(d => new PackageDependency
-        //            {
-        //                Name = d.Id,
-        //                Version = d.Range
-        //            }).ToList();
-
-        //        context.Packages.Add(newPackage);
-
-        //}
-        //await context.SaveChangesAsync();
-        /////////////
-        //var response = await _httpClient.GetAsync("https://api.nuget.org/v3/registration5-gz-semver2/newtonsoft.json/index.json");
-        //if (response.IsSuccessStatusCode)
-        //{
-        //    var contentStream = await response.Content.ReadAsStreamAsync();
-        //    using (var decompressedStream = new GZipStream(contentStream, CompressionMode.Decompress))
-        //    using (var reader = new StreamReader(decompressedStream))
-        //    {
-        //        var content = await reader.ReadToEndAsync();
-        //        var packageData = JsonSerializer.Deserialize<NuGetPackageData>(content, new JsonSerializerOptions
-        //        {
-        //            PropertyNameCaseInsensitive = true
-        //        });
-        //        if (packageData == null)
-        //        {
-        //            _logger.LogError("Failed to deserialize NuGet package data");
-        //            return;
-        //        }
-        //}
-        //}
     }
 }

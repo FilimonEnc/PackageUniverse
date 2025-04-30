@@ -10,6 +10,7 @@ public sealed class PUContext(DbContextOptions options)
 {
     public DbSet<PackageDependency> PackageDependencies { get; set; } = null!;
     public DbSet<Package> Packages { get; set; } = null!;
+    public DbSet<PackageVersion> PackageVersions { get; set; } = null!;
 
     public override int SaveChanges()
     {

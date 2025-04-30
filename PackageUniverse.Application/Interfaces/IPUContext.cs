@@ -1,11 +1,14 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using PackageUniverse.Core.Entities;
 
 namespace PackageUniverse.Application.Interfaces;
 
 public interface IPUContext
 {
     DbSet<Package> Packages { get; set; }
+    DbSet<PackageVersion> PackageVersions { get; set; }
+    DbSet<PackageDependency> PackageDependencies { get; set; }
 
     DbSet<TEntity> Set<TEntity>() where TEntity : class;
 

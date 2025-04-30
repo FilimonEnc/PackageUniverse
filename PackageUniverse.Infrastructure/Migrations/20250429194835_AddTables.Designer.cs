@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PackageUniverse.Infrastructure.Data;
@@ -11,9 +12,11 @@ using PackageUniverse.Infrastructure.Data;
 namespace PackageUniverse.Infrastructure.Migrations
 {
     [DbContext(typeof(PUContext))]
-    partial class PUContextModelSnapshot : ModelSnapshot
+    [Migration("20250429194835_AddTables")]
+    partial class AddTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -43,14 +46,12 @@ namespace PackageUniverse.Infrastructure.Migrations
                     b.Property<bool>("IsRecommended")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("NugetId")
+                    b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("NugetId")
-                        .IsUnique();
 
                     b.ToTable("Packages", (string)null);
                 });

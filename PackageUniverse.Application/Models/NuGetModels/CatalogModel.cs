@@ -6,7 +6,7 @@ namespace PackageUniverse.Application.Models.NuGetModels;
 
 public class CatalogListModel : Model
 {
-    [JsonPropertyName("@id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
     [JsonPropertyName("@type")] public List<string> Type { get; set; } = new();
 
@@ -29,7 +29,7 @@ public class CatalogListModel : Model
 
 public class CatalogPage : Model
 {
-    [JsonPropertyName("@id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
     [JsonPropertyName("@type")] public string Type { get; set; } = string.Empty;
 
@@ -46,7 +46,7 @@ public class CatalogPage : Model
 
 public class CatalogModel : Model
 {
-    [JsonPropertyName("@id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
     [JsonPropertyName("@type")] public string Type { get; set; } = string.Empty;
 
@@ -63,7 +63,7 @@ public class CatalogModel : Model
 
 public class PackageDetail : Model
 {
-    [JsonPropertyName("@id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
     [JsonPropertyName("@type")] public string Type { get; set; } = string.Empty;
 
@@ -82,7 +82,7 @@ public class PackageDetail : Model
 
 public class PackageDetailModel : Model
 {
-    [JsonPropertyName("@id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
     [JsonPropertyName("@type")] public List<string> Type { get; set; } = new();
 
@@ -140,7 +140,7 @@ public class PackageDetailModel : Model
 
 public class DependencyGroup : Model
 {
-    [JsonPropertyName("@id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
     [JsonPropertyName("@type")] public string Type { get; set; } = string.Empty;
 
@@ -151,7 +151,7 @@ public class DependencyGroup : Model
 
 public class Dependency : Model
 {
-    [JsonPropertyName("@id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
     [JsonPropertyName("@type")] public string Type { get; set; } = string.Empty;
 
@@ -162,7 +162,7 @@ public class Dependency : Model
 
 public class PackageEntry : Model
 {
-    [JsonPropertyName("@id")] public string Id { get; set; } = string.Empty;
+    [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
     [JsonPropertyName("@type")] public string Type { get; set; } = string.Empty;
 

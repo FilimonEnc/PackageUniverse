@@ -1,13 +1,10 @@
-﻿using System.ComponentModel.DataAnnotations;
-using PackageUniverse.Core.Entities;
+namespace PackageUniverse.Core.Entities;
 
 public class Package : Entity
 {
-    [Required] public string PackageId { get; set; } = string.Empty;
-
-    [Required] public string Name { get; set; } = string.Empty;
-
+    public string NugetId { get; set; } = string.Empty; // хранит JSON-поле "@id" или "nuget:id"
     public string? Description { get; set; }
+    public bool IsRecommended { get; set; }
 
-    public List<PackageDependency> Dependencies { get; set; } = new();
+    public ICollection<PackageVersion> Versions { get; set; } = new List<PackageVersion>();
 }

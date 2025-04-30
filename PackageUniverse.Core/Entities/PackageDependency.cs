@@ -1,7 +1,12 @@
-﻿using PackageUniverse.Core.Entities;
+namespace PackageUniverse.Core.Entities;
 
 public class PackageDependency : Entity
 {
-    public string Name { get; set; } = string.Empty;
-    public string Version { get; set; } = string.Empty;
+    public int SourceVersionId { get; set; }
+    public int TargetPackageId { get; set; }
+    public string TargetVersionRange { get; set; } = string.Empty;
+    public string TargetFramework { get; set; } = string.Empty;
+
+    public PackageVersion SourceVersion { get; set; } = null!;
+    public Package TargetPackage { get; set; } = null!;
 }

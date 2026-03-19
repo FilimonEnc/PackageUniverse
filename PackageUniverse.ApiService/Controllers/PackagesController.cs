@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using PackageUniverse.Application.CQRS.Packages.Queries.GetPackages;
 using PackageUniverse.Application.Models;
 
 namespace PackageUniverse.ApiService.Controllers;
@@ -26,7 +25,8 @@ public class PackagesController : BaseController
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IEnumerable<PackageModel>> GetAll()
     {
-        GetPackagesQuery query = new();
-        return await Mediator.Send(query);
+        //GetPackagesQuery query = new();
+        //return await Mediator.Send(query);
+        return null;
     }
 }

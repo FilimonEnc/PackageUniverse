@@ -21,7 +21,8 @@ public class PackageVersionConfiguration : IEntityTypeConfiguration<PackageVersi
         builder.Property(v => v.TargetFramework)
             .HasMaxLength(100);
         builder.Property(v => v.PackageUrl)
-            .IsRequired();
+            .IsRequired()
+            .HasMaxLength(8000);
 
         builder.HasMany(v => v.Dependencies)
             .WithOne(d => d.SourceVersion)

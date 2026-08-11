@@ -103,19 +103,20 @@ public class NuGetPackageCheckerService(
 
     private async Task ProcessPackageBatchAsync(IPUContext context, IEnumerable<string> batchUris, CancellationToken cancellationToken)
     {
-        // Параллельная обработка пакетов внутри батча
+        // Сначала параллельно загружаем все данные через HTTP (это безопасно)
+        var packageDetails = new List<PackageDetailModel?>();
         var tasks = batchUris.Select(async uri =>
         {
             try
             {
                 await _httpSemaphore.WaitAsync(cancellationToken);
                 var pkg = await GetPackageDetailAsync(uri, cancellationToken);
-                if (pkg != null)
-                    await SavePackageDetailAsync(context, pkg, cancellationToken);
+                return pkg;
             }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "Ошибка при обработке пакета: {Uri}", uri);
+                logger.LogDebug(ex, "Ошибка при загрузке пакета: {Uri}", uri);
+                return null;
             }
             finally
             {
@@ -123,7 +124,24 @@ public class NuGetPackageCheckerService(
             }
         });
 
-        await Task.WhenAll(tasks);
+        var results = await Task.WhenAll(tasks);
+        packageDetails.AddRange(results.Where(p => p != null));
+
+        // Затем последовательно обрабатываем и сохраняем в БД (чтобы не было конфликтов DbContext)
+        foreach (var pkg in packageDetails)
+        {
+            if (pkg != null)
+            {
+                try
+                {
+                    await SavePackageDetailAsync(context, pkg, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Ошибка при сохранении пакета {PackageId}", pkg.PackageId);
+                }
+            }
+        }
     }
 
     private async Task SavePackageDetailAsync(

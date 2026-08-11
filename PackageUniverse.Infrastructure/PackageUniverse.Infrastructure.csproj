@@ -1,18 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\PackageUniverse.Application\PackageUniverse.Application.csproj"/>
-        <ProjectReference Include="..\PackageUniverse.Core\PackageUniverse.Core.csproj"/>
+        <ProjectReference Include="..\PackageUniverse.Application\PackageUniverse.Application.csproj" />
+        <ProjectReference Include="..\PackageUniverse.Core\PackageUniverse.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.2.0"/>
+        <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
     </ItemGroup>
 
 </Project>

@@ -4,7 +4,7 @@ namespace PackageUniverse.Application.Models.NuGetModels;
 
 #region Список страниц
 
-public class CatalogListModel : Model
+public class CatalogListModel
 {
     [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
@@ -27,7 +27,7 @@ public class CatalogListModel : Model
     [JsonPropertyName("items")] public List<CatalogPage> Items { get; set; } = new();
 }
 
-public class CatalogPage : Model
+public class CatalogPage
 {
     [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
@@ -44,7 +44,7 @@ public class CatalogPage : Model
 
 #region Список пакетов на странице
 
-public class CatalogModel : Model
+public class CatalogModel
 {
     [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
@@ -61,7 +61,7 @@ public class CatalogModel : Model
     [JsonPropertyName("items")] public List<PackageDetail> Items { get; set; } = new();
 }
 
-public class PackageDetail : Model
+public class PackageDetail
 {
     [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
@@ -80,7 +80,7 @@ public class PackageDetail : Model
 
 #region Детализация пакета
 
-public class PackageDetailModel : Model
+public class PackageDetailModel
 {
     [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
@@ -138,7 +138,7 @@ public class PackageDetailModel : Model
     [JsonPropertyName("tags")] public List<string> Tags { get; set; } = new();
 }
 
-public class DependencyGroup : Model
+public class DependencyGroup
 {
     [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
@@ -149,7 +149,7 @@ public class DependencyGroup : Model
     [JsonPropertyName("targetFramework")] public string TargetFramework { get; set; } = string.Empty;
 }
 
-public class Dependency : Model
+public class Dependency
 {
     [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 
@@ -160,7 +160,7 @@ public class Dependency : Model
     [JsonPropertyName("range")] public string Range { get; set; } = string.Empty;
 }
 
-public class PackageEntry : Model
+public class PackageEntry
 {
     [JsonPropertyName("@id")] public string NuGetUri { get; set; } = string.Empty;
 

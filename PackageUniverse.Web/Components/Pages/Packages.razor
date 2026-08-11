@@ -3,6 +3,12 @@
 @using PackageUniverse.Application.Models
 @inject IJSRuntime JS
 
+@code {
+    private static double Cos(double x) => Math.Cos(x);
+    private static double Sin(double x) => Math.Sin(x);
+    private static double Sqrt(double x) => Math.Sqrt(x);
+}
+
 <PageTitle>Package Universe - Visual Explorer</PageTitle>
 
 <div class="packages-container">
@@ -205,7 +211,8 @@
         // Calculate sizes based on downloads
         var maxDownloads = sorted.Max(p => p.TotalDownloads);
         var minDownloads = sorted.Min(p => p.TotalDownloads);
-        var downloadRange = Math.Max(maxDownloads - minDownloads, 1);
+        var downloadRange = maxDownloads - minDownloads;
+        if (downloadRange <= 0) downloadRange = 1;
         
         var centerX = 1000.0;
         var centerY = 1000.0;
@@ -243,8 +250,8 @@
             var pkgData = sorted[i];
             var radius = CalculateRadius(pkgData.TotalDownloads, minDownloads, maxDownloads);
             
-            var x = centerX + Math.Cos(currentAngle) * currentDistance;
-            var y = centerY + Math.Sin(currentAngle) * currentDistance;
+            var x = centerX + Cos(currentAngle) * currentDistance;
+            var y = centerY + Sin(currentAngle) * currentDistance;
             
             var pkg = new PositionedPackage
             {
@@ -273,7 +280,9 @@
     
     private double CalculateRadius(int downloads, int min, int max)
     {
-        var normalized = (double)(downloads - min) / Math.Max(max - min, 1);
+        var diff = max - min;
+        if (diff <= 0) diff = 1;
+        var normalized = (double)(downloads - min) / diff;
         return 25 + normalized * 100; // 25-125px radius
     }
     
@@ -300,7 +309,7 @@
                     
                     var dx = pkg1.X - pkg2.X;
                     var dy = pkg1.Y - pkg2.Y;
-                    var dist = Math.Sqrt(dx * dx + dy * dy) + 0.1;
+                    var dist = Sqrt(dx * dx + dy * dy) + 0.1;
                     
                     if (dist < 300)
                     {
@@ -323,7 +332,7 @@
                     
                     var dx = target.X - pkg.X;
                     var dy = target.Y - pkg.Y;
-                    var dist = Math.Sqrt(dx * dx + dy * dy) + 0.1;
+                    var dist = Sqrt(dx * dx + dy * dy) + 0.1;
                     
                     if (dist > idealDistance)
                     {
@@ -364,7 +373,7 @@
             {
                 if (!nameToPkg.TryGetValue(dep.TargetPackageName, out var target)) continue;
                 
-                var edgeKey = $"{Math.Min(pkg.Name, dep.TargetPackageName)}-{Math.Max(pkg.Name, dep.TargetPackageName)}";
+                var edgeKey = $"{(pkg.Name.CompareTo(dep.TargetPackageName) < 0 ? pkg.Name : dep.TargetPackageName)}-{(pkg.Name.CompareTo(dep.TargetPackageName) < 0 ? dep.TargetPackageName : pkg.Name)}";
                 if (edgeSet.Contains(edgeKey)) continue;
                 edgeSet.Add(edgeKey);
                 
@@ -401,12 +410,16 @@
     
     private void ZoomIn()
     {
-        zoomLevel = Math.Min(zoomLevel * 1.2, 3.0);
+        var newZoom = zoomLevel * 1.2;
+        if (newZoom > 3.0) newZoom = 3.0;
+        zoomLevel = newZoom;
     }
     
     private void ZoomOut()
     {
-        zoomLevel = Math.Max(zoomLevel / 1.2, 0.3);
+        var newZoom = zoomLevel / 1.2;
+        if (newZoom < 0.3) newZoom = 0.3;
+        zoomLevel = newZoom;
     }
     
     private void ResetView()

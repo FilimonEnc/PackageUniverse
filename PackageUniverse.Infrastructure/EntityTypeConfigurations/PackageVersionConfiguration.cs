@@ -13,13 +13,13 @@ public class PackageVersionConfiguration : IEntityTypeConfiguration<PackageVersi
 
         builder.Property(v => v.Version)
             .IsRequired()
-            .HasMaxLength(50);
+            .HasMaxLength(255);
         builder.Property(v => v.PublishedAt)
             .IsRequired();
         builder.Property(v => v.IsPrerelease)
             .IsRequired();
         builder.Property(v => v.TargetFramework)
-            .HasMaxLength(100);
+            .HasMaxLength(255);
         builder.Property(v => v.PackageUrl)
             .IsRequired()
             .HasMaxLength(8000);

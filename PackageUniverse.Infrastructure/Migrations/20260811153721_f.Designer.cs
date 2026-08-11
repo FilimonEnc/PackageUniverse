@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PackageUniverse.Infrastructure.Data;
@@ -11,9 +12,11 @@ using PackageUniverse.Infrastructure.Data;
 namespace PackageUniverse.Infrastructure.Migrations
 {
     [DbContext(typeof(PUContext))]
-    partial class PUContextModelSnapshot : ModelSnapshot
+    [Migration("20260811153721_f")]
+    partial class f
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -74,16 +77,16 @@ namespace PackageUniverse.Infrastructure.Migrations
 
                     b.Property<string>("TargetFramework")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<int>("TargetPackageId")
                         .HasColumnType("integer");
 
                     b.Property<string>("TargetVersionRange")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
 
@@ -124,13 +127,13 @@ namespace PackageUniverse.Infrastructure.Migrations
 
                     b.Property<string>("TargetFramework")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("Version")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.HasKey("Id");
 

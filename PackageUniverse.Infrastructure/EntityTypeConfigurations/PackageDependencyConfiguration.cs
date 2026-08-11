@@ -13,9 +13,9 @@ public class PackageDependencyConfiguration : IEntityTypeConfiguration<PackageDe
 
         builder.Property(d => d.TargetVersionRange)
             .IsRequired()
-            .HasMaxLength(100);
+            .HasMaxLength(255);
         builder.Property(d => d.TargetFramework)
-            .HasMaxLength(100);
+            .HasMaxLength(255);
 
         builder.HasOne(d => d.SourceVersion)
             .WithMany(v => v.Dependencies)

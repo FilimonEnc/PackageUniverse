@@ -22,7 +22,7 @@ public class PackageVersionConfiguration : IEntityTypeConfiguration<PackageVersi
             .HasMaxLength(100);
         builder.Property(v => v.PackageUrl)
             .IsRequired()
-            .HasMaxLength(8000);
+            .HasColumnType("text");
 
         builder.HasMany(v => v.Dependencies)
             .WithOne(d => d.SourceVersion)

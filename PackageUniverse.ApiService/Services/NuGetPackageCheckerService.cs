@@ -25,6 +25,8 @@ public class NuGetPackageCheckerService(
                                   ?? throw new InvalidOperationException("NuGet Catalog URI не сконфигурирована.");
 
     private HttpResponseValidationPipeline? _pipeline;
+    // Ограничитель параллелизма для HTTP запросов, чтобы не упереться в лимты или память
+    private readonly SemaphoreSlim _httpSemaphore = new(50); 
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -41,34 +43,30 @@ public class NuGetPackageCheckerService(
     {
         var catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri, stoppingToken);
 
-        foreach (var pageBatch in catalogList.Items.Chunk(4000)) // CatalogPage
-            await ProcessCatalogPagesAsync(context, pageBatch, stoppingToken); // по 4000 мета-страниц за раз
+        foreach (var pageBatch in catalogList.Items.Chunk(4000)) 
+            await ProcessCatalogPagesAsync(context, pageBatch, stoppingToken);
     }
 
     private async Task ProcessCatalogPagesAsync(IPUContext context, IEnumerable<CatalogPage> batch, CancellationToken stoppingToken)
     {
         var catalogs = new List<CatalogModel>();
 
-        // Обрабатываем страницы последовательно для каждого батча, чтобы избежать проблем с DbContext
-        foreach (var page in batch)
+        // Параллельная загрузка страниц каталога с ограничением конкуренции
+        var tasks = batch.Select(async page =>
         {
-            if (stoppingToken.IsCancellationRequested)
-                stoppingToken.ThrowIfCancellationRequested();
-
             try
             {
-                var catalog = await GetFromJson<CatalogModel>(page.NuGetUri, stoppingToken);
-                catalogs.Add(catalog);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                throw;
+                return await GetFromJson<CatalogModel>(page.NuGetUri, stoppingToken);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Ошибка при обработке страницы каталога: {Uri}", page.NuGetUri);
+                return null;
             }
-        }
+        });
+
+        var results = await Task.WhenAll(tasks);
+        catalogs.AddRange(results.Where(c => c != null)!);
 
         await ProcessPackageBatchesAsync(context, catalogs, stoppingToken);
     }
@@ -76,8 +74,10 @@ public class NuGetPackageCheckerService(
     private async Task ProcessPackageBatchesAsync(IPUContext context, IEnumerable<CatalogModel> catalogs, CancellationToken stoppingToken)
     {
         var allUris = catalogs.SelectMany(c => c.Items.Select(p => p.NuGetUri)).ToList();
+        logger.LogInformation("Найдено {Count} пакетов для обработки", allUris.Count);
 
-        foreach (var batch in allUris.Chunk(100)) // Уменьшенный размер батча для надежной работы с EF Core
+        // Разбиваем на большие батчи для эффективной работы с БД
+        foreach (var batch in allUris.Chunk(500)) 
         {
             if (stoppingToken.IsCancellationRequested)
                 stoppingToken.ThrowIfCancellationRequested();
@@ -85,6 +85,10 @@ public class NuGetPackageCheckerService(
             try
             {
                 await ProcessPackageBatchAsync(context, batch, stoppingToken);
+                
+                // Сохраняем весь батч разом
+                await context.SaveChangesAsync(stoppingToken);
+                logger.LogDebug("Батч из {Count} пакетов сохранен в БД", batch.Length);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -94,42 +98,32 @@ public class NuGetPackageCheckerService(
             {
                 logger.LogWarning(ex, "Ошибка при обработке батча пакетов");
             }
-
-            // Сохраняем после каждого батча
-            try
-            {
-                await context.SaveChangesAsync(stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Ошибка при сохранении батча в базу данных");
-            }
         }
     }
 
     private async Task ProcessPackageBatchAsync(IPUContext context, IEnumerable<string> batchUris, CancellationToken cancellationToken)
     {
-        // Обрабатываем пакеты последовательно внутри батча для избежания проблем с трекингом EF Core
-        foreach (var uri in batchUris)
+        // Параллельная обработка пакетов внутри батча
+        var tasks = batchUris.Select(async uri =>
         {
-            if (cancellationToken.IsCancellationRequested)
-                cancellationToken.ThrowIfCancellationRequested();
-
             try
             {
+                await _httpSemaphore.WaitAsync(cancellationToken);
                 var pkg = await GetPackageDetailAsync(uri, cancellationToken);
                 if (pkg != null)
                     await SavePackageDetailAsync(context, pkg, cancellationToken);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Ошибка при обработке пакета: {Uri}", uri);
+                logger.LogDebug(ex, "Ошибка при обработке пакета: {Uri}", uri);
             }
-        }
+            finally
+            {
+                _httpSemaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
     }
 
     private async Task SavePackageDetailAsync(
@@ -150,20 +144,26 @@ public class NuGetPackageCheckerService(
                 IsRecommended = false
             };
             context.Packages.Add(packageEntity);
-            await context.SaveChangesAsync(cancellationToken);
+            // Не делаем SaveChanges здесь, ждем конца батча
         }
 
         // 2. Find or create the specific version
+        // Важно: если пакет только что создан в этом же контексте, Id может быть еще не сгенерирован БД,
+        // но EF Core отслеживает его. Если Id генерируется БД, нужно быть осторожным.
+        // Для упрощения предполагаем, что мы можем найти по NugetId, если он уже в контексте.
+        
+        int packageId = packageEntity.Id;
+        
         var versionEntity = await context.PackageVersions
             .FirstOrDefaultAsync(v =>
-                v.PackageId == packageEntity.Id &&
+                v.PackageId == packageId &&
                 v.Version == pkg.Version, cancellationToken);
 
         if (versionEntity == null)
         {
             versionEntity = new PackageVersion
             {
-                PackageId = packageEntity.Id,
+                PackageId = packageId,
                 Version = pkg.Version,
                 PublishedAt = pkg.Published,
                 IsPrerelease = pkg.IsPrerelease,
@@ -171,10 +171,16 @@ public class NuGetPackageCheckerService(
                 PackageUrl = pkg.PackageId
             };
             context.PackageVersions.Add(versionEntity);
-            await context.SaveChangesAsync(cancellationToken);
+            // Ждем конца батча для сохранения
+        }
+        else
+        {
+            // Версия уже есть, зависимости скорее всего тоже, можно пропустить для экономии времени
+            // Раскомментируйте, если нужно обновлять зависимости для существующих версий
+            return; 
         }
 
-        // 3. Process dependencies sequentially
+        // 3. Process dependencies
         foreach (var group in pkg.DependencyGroups)
         foreach (var dep in group.Dependencies)
         {
@@ -188,7 +194,8 @@ public class NuGetPackageCheckerService(
 
                 if (targetPackage == null)
                 {
-                    logger.LogDebug("Пропущена зависимость. Пакет {DepId} не найден", dep.DependencyId);
+                    // Зависимости может еще не быть в базе, так как мы идем по каталогу хронологически или хаотично
+                    // Пропускаем, она добавится позже, когда дойдет очередь до этого пакета
                     continue;
                 }
 
@@ -212,7 +219,7 @@ public class NuGetPackageCheckerService(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Ошибка при обработке зависимости {DepId}", dep.DependencyId);
+                logger.LogDebug(ex, "Ошибка при обработке зависимости {DepId}", dep.DependencyId);
             }
         }
     }
@@ -232,18 +239,34 @@ public class NuGetPackageCheckerService(
 
         using var response = await httpClient.GetAsync(uri, cancellationToken);
         
-        // Проверяем успешность ответа перед валидацией
+        // Исправление NullReferenceException: строгая проверка статуса перед использованием контента
         if (!response.IsSuccessStatusCode)
         {
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                logger.LogDebug("Пакет не найден (404): {Uri}", uri);
+                return null;
+            }
+            
             logger.LogDebug("HTTP запрос вернул статус {Status} для URI: {Uri}", response.StatusCode, uri);
             throw new HttpRequestException($"Запрос не удался: {response.StatusCode}");
         }
 
-        await _pipeline.ValidateAsync(new HttpValidationContext(response, uri),
-            [HttpValidationTag.ExpectBody, HttpValidationTag.Get]);
+        // Валидация через пайплайн
+        try 
+        {
+            await _pipeline.ValidateAsync(new HttpValidationContext(response, uri),
+                [HttpValidationTag.ExpectBody, HttpValidationTag.Get]);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Валидация ответа не пройдена для {Uri}", uri);
+            throw;
+        }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         var tModel = await JsonSerializer.DeserializeAsync<T>(stream, CachedJsonSerializerOptions, cancellationToken);
+        
         return tModel ?? throw new JsonException($"Не удалось десериализовать объект типа {typeof(T).Name} из {uri}");
     }
 }

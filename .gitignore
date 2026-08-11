@@ -1,1 +1,29 @@
-Nothing should be ignored based on the provided file changes. The only modified file is a C# source code file (`NuGetPackageCheckerService.cs`), which should not be added to .gitignore.
+```
+# Dependencies
+packages/
+**/bin/
+**/obj/
+**/Debug/
+**/Release/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Build outputs
+**/target/
+**/dist/
+**/build/
+```

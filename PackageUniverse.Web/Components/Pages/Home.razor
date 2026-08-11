@@ -1,7 +1,139 @@
 ﻿@page "/"
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Package Universe - Home</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="landing-container">
+    <div class="hero-section">
+        <h1 class="hero-title">NuGet Package Universe</h1>
+        <p class="hero-subtitle">Explore the ecosystem of NuGet packages in an interactive visual experience</p>
+        
+        <div class="features">
+            <div class="feature-card">
+                <div class="feature-icon">🎯</div>
+                <h3>Visual Exploration</h3>
+                <p>Navigate through packages as bubbles in an interactive canvas</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Size Matters</h3>
+                <p>Bubble size represents package popularity based on downloads</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔗</div>
+                <h3>Dependencies</h3>
+                <p>See connections between related packages</p>
+            </div>
+        </div>
+        
+        <a href="/packages" class="explore-btn">
+            <span>Explore the Universe</span>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+        </a>
+    </div>
+</div>
 
-Welcome to your new app.
+<style>
+    .landing-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+        padding: 2rem;
+    }
+    
+    .hero-section {
+        text-align: center;
+        max-width: 1200px;
+    }
+    
+    .hero-title {
+        font-size: 3.5rem;
+        margin-bottom: 1rem;
+        background: linear-gradient(90deg, #60a5fa, #a78bfa, #60a5fa);
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: gradientShift 3s ease infinite;
+    }
+    
+    @keyframes gradientShift {
+        0%, 100% { background-position: 0% center; }
+        50% { background-position: 100% center; }
+    }
+    
+    .hero-subtitle {
+        font-size: 1.25rem;
+        color: #94a3b8;
+        margin-bottom: 3rem;
+    }
+    
+    .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 2rem;
+        margin-bottom: 3rem;
+    }
+    
+    .feature-card {
+        background: rgba(30, 41, 59, 0.5);
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 2rem;
+        transition: transform 0.3s ease, border-color 0.3s ease;
+    }
+    
+    .feature-card:hover {
+        transform: translateY(-5px);
+        border-color: #60a5fa;
+    }
+    
+    .feature-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+    
+    .feature-card h3 {
+        color: #e2e8f0;
+        margin-bottom: 0.5rem;
+        font-size: 1.25rem;
+    }
+    
+    .feature-card p {
+        color: #94a3b8;
+        font-size: 0.9rem;
+    }
+    
+    .explore-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem 2.5rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: white;
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        border: none;
+        border-radius: 50px;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+    }
+    
+    .explore-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 6px 30px rgba(59, 130, 246, 0.6);
+    }
+    
+    .explore-btn svg {
+        transition: transform 0.3s ease;
+    }
+    
+    .explore-btn:hover svg {
+        transform: translateX(5px);
+    }
+</style>

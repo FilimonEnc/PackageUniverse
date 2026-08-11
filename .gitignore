@@ -1,26 +1,24 @@
-```
-# Build artifacts
+```razor
+# Build outputs
 bin/
 obj/
-*.dll
-*.exe
-*.pdb
-*.so
-*.dylib
-*.jar
-*.war
-*.class
+out/
 
 # Dependencies
-packages/
 node_modules/
-vendor/
+packages/
 
-# IDE files
-.vs/
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editor/IDE
 .vscode/
 .idea/
-*.userprefs
 *.user
 *.suo
 *.userosscache
@@ -29,40 +27,29 @@ vendor/
 # OS generated files
 .DS_Store
 Thumbs.db
-ehthumbs.db
-Icon?
-._*
 
-# Logs
-*.log
+# Testing
+TestResults/
 
-# Environment variables
-.env
-.env.local
-*.env.*
+# Browser extensions
+extension/
 
-# Test and coverage
-coverage/
-*.cover
-*.pyc
-*.pyo
-*.pyd
-__pycache__/
-*.so
+# Localized resources
+*.g.cs
+*.Designer.cs
 
-# Distribution / packaging
-.Python
-*.egg-info/
-.eggs/
-dist/
-build/
-develop-eggs/
-.installed.cfg
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg
+# Bundling and minification
+wwwroot/css/site.min.css
+wwwroot/js/site.min.js
+wwwroot/css/site.css.map
+wwwroot/js/site.js.map
+
+# ASP.NET Core
+appsettings.Development.json
+appsettings.Production.json
+secrets.json
+
+# Temporary files
+*.tmp
+*.temp
 ```

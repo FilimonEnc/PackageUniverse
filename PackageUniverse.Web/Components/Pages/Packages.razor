@@ -167,7 +167,7 @@
         try
         {
             var httpClient = new HttpClient();
-            httpClient.BaseAddress = new Uri("https+http://apiservice");
+            httpClient.BaseAddress = new Uri("http://apiservice");
             
             var response = await httpClient.GetAsync("/api/packages");
             if (response.IsSuccessStatusCode)

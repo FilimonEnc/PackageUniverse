@@ -57,7 +57,10 @@
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
-        animation: gradientShift 3s ease infinite;
+        animation-name: gradientShift;
+        animation-duration: 3s;
+        animation-timing-function: ease;
+        animation-iteration-count: infinite;
     }
 
     @keyframes gradientShift {

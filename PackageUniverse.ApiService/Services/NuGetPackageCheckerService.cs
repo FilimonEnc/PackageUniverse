@@ -262,36 +262,62 @@ public class NuGetPackageCheckerService(
         if (_pipeline == null)
             throw new InvalidOperationException("Pipeline не инициализирован. Убедитесь, что сервис запущен корректно.");
 
-        using var response = await httpClient.GetAsync(uri, cancellationToken);
+        // Увеличиваем таймаут для отдельных запросов, так как NuGet может отвечать медленно
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(60)); // 60 секунд на один запрос
         
-        // Исправление NullReferenceException: строгая проверка статуса перед использованием контента
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            using var response = await httpClient.GetAsync(uri, cts.Token);
+            
+            // Исправление NullReferenceException: строгая проверка статуса перед использованием контента
+            if (!response.IsSuccessStatusCode)
             {
-                logger.LogDebug("Пакет не найден (404): {Uri}", uri);
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    logger.LogDebug("Пакет не найден (404): {Uri}", uri);
+                    return null;
+                }
+                
+                logger.LogDebug("HTTP запрос вернул статус {Status} для URI: {Uri}", response.StatusCode, uri);
+                // Не выбрасываем исключение для других ошибок, просто возвращаем null
+                // Это позволяет продолжить обработку остальных пакетов даже при временных сбоях API
                 return null;
             }
+
+            // Валидация через пайплайн
+            try 
+            {
+                await _pipeline.ValidateAsync(new HttpValidationContext(response, uri),
+                    [HttpValidationTag.ExpectBody, HttpValidationTag.Get]);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Валидация ответа не пройдена для {Uri}", uri);
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
+            var tModel = await JsonSerializer.DeserializeAsync<T>(stream, CachedJsonSerializerOptions, cts.Token);
             
-            logger.LogDebug("HTTP запрос вернул статус {Status} для URI: {Uri}", response.StatusCode, uri);
-            throw new HttpRequestException($"Запрос не удался: {response.StatusCode}");
+            return tModel ?? throw new JsonException($"Не удалось десериализовать объект типа {typeof(T).Name} из {uri}");
         }
-
-        // Валидация через пайплайн
-        try 
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            await _pipeline.ValidateAsync(new HttpValidationContext(response, uri),
-                [HttpValidationTag.ExpectBody, HttpValidationTag.Get]);
+            // Таймаут запроса (не отмена сервиса)
+            logger.LogWarning("Таймаут при загрузке пакета: {Uri}. Ошибка: {Message}", uri, ex.Message);
+            return null;
         }
-        catch (Exception ex)
+        catch (IOException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "Валидация ответа не пройдена для {Uri}", uri);
-            throw;
+            // Ошибки сети (разрыв соединения и т.п.)
+            logger.LogWarning("Ошибка сети при загрузке пакета: {Uri}. Ошибка: {Message}", uri, ex.Message);
+            return null;
         }
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var tModel = await JsonSerializer.DeserializeAsync<T>(stream, CachedJsonSerializerOptions, cancellationToken);
-        
-        return tModel ?? throw new JsonException($"Не удалось десериализовать объект типа {typeof(T).Name} из {uri}");
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning("HTTP ошибка при загрузке пакета: {Uri}. Ошибка: {Message}", uri, ex.Message);
+            return null;
+        }
     }
 }

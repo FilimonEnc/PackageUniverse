@@ -1,1 +1,1 @@
-Nothing needs to be added to the .gitignore file since only a Razor component file (.razor) was modified, which is a source code file that should be tracked in version control. No build artifacts, dependencies, or temporary files were detected in the changes.
+Nothing should be ignored based on the provided file changes. The only modified file is a source code file (.razor) which should not be added to .gitignore.

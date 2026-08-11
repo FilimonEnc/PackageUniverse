@@ -13,7 +13,7 @@ public class PackageConfiguration : IEntityTypeConfiguration<Package>
         builder.ToTable("Packages");
         builder.HasKey(p => p.Id);
         builder.Property(p => p.Description)
-            .HasMaxLength(1000);
+            .HasMaxLength(8000);
         builder.Property(p => p.IsRecommended)
             .IsRequired();
 

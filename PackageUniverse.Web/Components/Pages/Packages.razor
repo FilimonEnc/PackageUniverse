@@ -109,7 +109,7 @@
                     <div class="popup-stats">
                         <div class="stat-item">
                             <span class="stat-label">Downloads</span>
-                            <span class="stat-value">@FormatDownloads(selectedPackage.Downloads)</span>
+                            <span class="stat-value">@FormatDownloads(selectedPackage.TotalDownloads)</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">Dependencies</span>
@@ -474,7 +474,7 @@
         animation: spin 1s linear infinite;
     }
     
-    @keyframes spin {
+    @@keyframes spin {
         to { transform: rotate(360deg); }
     }
     
@@ -555,7 +555,7 @@
         animation: dashFlow 3s linear infinite;
     }
     
-    @keyframes dashFlow {
+    @@keyframes dashFlow {
         to { stroke-dashoffset: -16; }
     }
     

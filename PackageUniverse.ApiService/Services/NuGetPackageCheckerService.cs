@@ -24,26 +24,28 @@ public class NuGetPackageCheckerService(
     private string NuGetGetUri => configuration["NuGet:CatalogsUri"]
                                   ?? throw new InvalidOperationException("NuGet Catalog URI не сконфигурирована.");
 
+    private HttpResponseValidationPipeline? _pipeline;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("NuGetPackageCheckerService running at: {Time}", DateTimeOffset.UtcNow);
         using var scope = serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IPUContext>();
-        var pipeline = scope.ServiceProvider.GetRequiredService<HttpResponseValidationPipeline>();
+        _pipeline = scope.ServiceProvider.GetRequiredService<HttpResponseValidationPipeline>();
 
-        await CheckForNewPackagesAsync(context, pipeline, stoppingToken);
+        await CheckForNewPackagesAsync(context, stoppingToken);
     }
 
 
-    private async Task CheckForNewPackagesAsync(IPUContext context, HttpResponseValidationPipeline pipeline, CancellationToken stoppingToken)
+    private async Task CheckForNewPackagesAsync(IPUContext context, CancellationToken stoppingToken)
     {
-        var catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri, pipeline, stoppingToken);
+        var catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri, stoppingToken);
 
         foreach (var pageBatch in catalogList.Items.Chunk(4000)) // CatalogPage
-            await ProcessCatalogPagesAsync(context, pipeline, pageBatch, stoppingToken); // по 4000 мета-страниц за раз
+            await ProcessCatalogPagesAsync(context, pageBatch, stoppingToken); // по 4000 мета-страниц за раз
     }
 
-    private async Task ProcessCatalogPagesAsync(IPUContext context, HttpResponseValidationPipeline pipeline, IEnumerable<CatalogPage> batch, CancellationToken stoppingToken)
+    private async Task ProcessCatalogPagesAsync(IPUContext context, IEnumerable<CatalogPage> batch, CancellationToken stoppingToken)
     {
         var catalogs = new List<CatalogModel>();
 
@@ -55,7 +57,7 @@ public class NuGetPackageCheckerService(
 
             try
             {
-                var catalog = await GetFromJson<CatalogModel>(page.NuGetUri, pipeline, stoppingToken);
+                var catalog = await GetFromJson<CatalogModel>(page.NuGetUri, stoppingToken);
                 catalogs.Add(catalog);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -128,11 +130,6 @@ public class NuGetPackageCheckerService(
                 logger.LogWarning(ex, "Ошибка при обработке пакета: {Uri}", uri);
             }
         }
-    }
-
-    private async Task<PackageDetailModel?> GetPackageDetailAsync(string uri, CancellationToken cancellationToken)
-    {
-        return await GetFromJson<PackageDetailModel>(uri, _pipeline!, cancellationToken);
     }
 
     private async Task SavePackageDetailAsync(
@@ -220,15 +217,29 @@ public class NuGetPackageCheckerService(
         }
     }
 
-    private HttpResponseValidationPipeline? _pipeline;
+    private async Task<PackageDetailModel?> GetPackageDetailAsync(string uri, CancellationToken cancellationToken)
+    {
+        return await GetFromJson<PackageDetailModel>(uri, cancellationToken);
+    }
 
-    private async Task<T> GetFromJson<T>(string uri, HttpResponseValidationPipeline pipeline, CancellationToken cancellationToken) where T : class
+    private async Task<T> GetFromJson<T>(string uri, CancellationToken cancellationToken) where T : class
     {
         if (string.IsNullOrWhiteSpace(uri))
             throw new ArgumentException("Параметр URI не может быть пустым.", nameof(uri));
 
+        if (_pipeline == null)
+            throw new InvalidOperationException("Pipeline не инициализирован. Убедитесь, что сервис запущен корректно.");
+
         using var response = await httpClient.GetAsync(uri, cancellationToken);
-        await pipeline.ValidateAsync(new HttpValidationContext(response, uri),
+        
+        // Проверяем успешность ответа перед валидацией
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogDebug("HTTP запрос вернул статус {Status} для URI: {Uri}", response.StatusCode, uri);
+            throw new HttpRequestException($"Запрос не удался: {response.StatusCode}");
+        }
+
+        await _pipeline.ValidateAsync(new HttpValidationContext(response, uri),
             [HttpValidationTag.ExpectBody, HttpValidationTag.Get]);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);

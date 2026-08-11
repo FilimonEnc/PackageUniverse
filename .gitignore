@@ -1,1 +1,43 @@
-Nothing should be ignored based on the provided file changes. The only modified file is a C# source code file (`NuGetPackageCheckerService.cs`), which is a legitimate source file that should not be ignored. No build artifacts, dependencies, or temporary files are present in the changes.
+```
+# Dependencies
+packages/
+bin/
+obj/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build outputs
+debug/
+release/
+*.dll
+*.exe
+*.pdb
+*.nupkg
+
+# Testing
+TestResults/
+
+# User-specific files
+*.user
+*.userosscache
+*.sln.docstates
+
+# Azure
+config/
+```

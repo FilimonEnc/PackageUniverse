@@ -76,7 +76,7 @@ public class NuGetPackageCheckerService(
         var allUris = catalogs.SelectMany(c => c.Items.Select(p => p.NuGetUri)).ToList();
         logger.LogInformation("Найдено {Count} пакетов для обработки", allUris.Count);
 
-        // Разбиваем на большие батчи для эффективной работы с БД
+        // Разбиваем на батчи для обработки
         foreach (var batch in allUris.Chunk(500)) 
         {
             if (stoppingToken.IsCancellationRequested)
@@ -85,10 +85,7 @@ public class NuGetPackageCheckerService(
             try
             {
                 await ProcessPackageBatchAsync(context, batch, stoppingToken);
-                
-                // Сохраняем весь батч разом
-                await context.SaveChangesAsync(stoppingToken);
-                logger.LogDebug("Батч из {Count} пакетов сохранен в БД", batch.Length);
+                logger.LogDebug("Батч из {Count} пакетов обработан", batch.Length);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -127,7 +124,9 @@ public class NuGetPackageCheckerService(
         var results = await Task.WhenAll(tasks);
         packageDetails.AddRange(results.Where(p => p != null));
 
-        // Затем последовательно обрабатываем и сохраняем в БД (чтобы не было конфликтов DbContext)
+        // Затем последовательно обрабатываем и сохраняем в БД
+        // SavePackageDetailAsync теперь сам делает SaveChanges для каждой сущности,
+        // поэтому общий SaveChanges здесь не нужен.
         foreach (var pkg in packageDetails)
         {
             if (pkg != null)
@@ -162,14 +161,13 @@ public class NuGetPackageCheckerService(
                 IsRecommended = false
             };
             context.Packages.Add(packageEntity);
-            // Не делаем SaveChanges здесь, ждем конца батча
+            
+            // ВАЖНО: Сохраняем пакет сразу, чтобы получить сгенерированный БД Id
+            // Это необходимо для создания связей с версиями и зависимостями
+            await context.SaveChangesAsync(cancellationToken);
         }
 
         // 2. Find or create the specific version
-        // Важно: если пакет только что создан в этом же контексте, Id может быть еще не сгенерирован БД,
-        // но EF Core отслеживает его. Если Id генерируется БД, нужно быть осторожным.
-        // Для упрощения предполагаем, что мы можем найти по NugetId, если он уже в контексте.
-        
         int packageId = packageEntity.Id;
         
         var versionEntity = await context.PackageVersions
@@ -189,12 +187,13 @@ public class NuGetPackageCheckerService(
                 PackageUrl = pkg.PackageId
             };
             context.PackageVersions.Add(versionEntity);
-            // Ждем конца батча для сохранения
+            
+            // Сохраняем версию сразу, чтобы получить Id для зависимостей
+            await context.SaveChangesAsync(cancellationToken);
         }
         else
         {
             // Версия уже есть, зависимости скорее всего тоже, можно пропустить для экономии времени
-            // Раскомментируйте, если нужно обновлять зависимости для существующих версий
             return; 
         }
 
@@ -212,9 +211,15 @@ public class NuGetPackageCheckerService(
 
                 if (targetPackage == null)
                 {
-                    // Зависимости может еще не быть в базе, так как мы идем по каталогу хронологически или хаотично
-                    // Пропускаем, она добавится позже, когда дойдет очередь до этого пакета
-                    continue;
+                    // Зависимости может еще не быть в базе, создаем заглушку
+                    targetPackage = new Package
+                    {
+                        NugetId = dep.DependencyId,
+                        Description = null,
+                        IsRecommended = false
+                    };
+                    context.Packages.Add(targetPackage);
+                    await context.SaveChangesAsync(cancellationToken);
                 }
 
                 var alreadyExists = await context.PackageDependencies.AnyAsync(d =>
@@ -233,6 +238,8 @@ public class NuGetPackageCheckerService(
                         TargetFramework = group.TargetFramework
                     };
                     context.PackageDependencies.Add(dependency);
+                    // Зависимости сохраняем в конце батча или сразу - не критично, но лучше сразу для надежности
+                    await context.SaveChangesAsync(cancellationToken);
                 }
             }
             catch (Exception ex)

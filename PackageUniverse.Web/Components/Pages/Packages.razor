@@ -68,16 +68,20 @@
                         
                         @foreach (var pkg in positionedPackages)
                         {
-                            var gradientId = string.Format("bubbleGradient{0}", ((pkg.Name.GetHashCode() % 3) + 3) % 3 + 1);
+                            var gradientId = $"bubbleGradient{((pkg.Name.GetHashCode() % 3) + 3) % 3 + 1}";
+                            var transformValue = $"translate({pkg.X.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}, {pkg.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)})";
+                            var circleRadius = pkg.Radius.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                            var foX = (-pkg.Radius).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                            var foWidth = (pkg.Radius * 2).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
                             <g class="bubble-group" 
                                @onclick="(() => SelectPackage(pkg))"
                                style="cursor: pointer;"
-                               transform="string.Format(&quot;translate({0}, {1})&quot;, pkg.X, pkg.Y)">
-                                <circle cx="0" cy="0" r="@pkg.Radius" 
+                               transform="@transformValue">
+                                <circle cx="0" cy="0" r="@circleRadius" 
                                         class="package-bubble @(selectedPackage?.Name == pkg.Name ? "selected" : "")"
                                         fill="url(#@gradientId)"
                                         filter="url(#glow)" />
-                                <foreignObject x="@(-pkg.Radius)" y="@(-pkg.Radius)" width="@(pkg.Radius * 2)" height="@(pkg.Radius * 2)">
+                                <foreignObject x="@foX" y="@foX" width="@foWidth" height="@foWidth">
                                     <div xmlns="http://www.w3.org/1999/xhtml" class="bubble-text-container">
                                         <div class="bubble-name">@GetDisplayName(pkg.Name)</div>
                                         @if (pkg.Downloads > 0)
@@ -411,13 +415,13 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .btn-retry { margin-top: 1.5rem; padding: 0.75rem 2rem; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem; }
     .btn-retry:hover { background: #2563eb; }
-    .canvas-wrapper { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+    .canvas-wrapper { position: relative; width: 100vw; height: 100vh; overflow: hidden; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; }
     .canvas-controls { position: absolute; top: 1rem; right: 1rem; z-index: 100; display: flex; gap: 0.5rem; }
     .control-btn { width: 40px; height: 40px; border: none; border-radius: 8px; background: rgba(30, 41, 59, 0.8); color: #e2e8f0; font-size: 1.5rem; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; }
     .control-btn:hover { background: #3b82f6; transform: scale(1.1); }
-    .canvas-container { width: 100%; height: 100%; overflow: hidden; cursor: grab; }
+    .canvas-container { width: 100%; height: 100%; overflow: hidden; cursor: grab; touch-action: none; }
     .canvas-container:active { cursor: grabbing; }
-    .canvas-content { transition: transform 0.1s ease-out; }
+    .canvas-content { will-change: transform; }
     .package-svg { width: 2000px; height: 2000px; }
     .dependency-line { stroke: rgba(148, 163, 184, 0.4); stroke-dasharray: 5 3; animation: dashFlow 3s linear infinite; }
     @keyframes dashFlow { to { stroke-dashoffset: -16; } }

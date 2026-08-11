@@ -1,23 +1,11 @@
 @page "/packages"
 @using System.Text.Json
 @using PackageUniverse.Application.Models
+@inject IJSRuntime JS
 
-<PageTitle>Package Universe</PageTitle>
+<PageTitle>Package Universe - Visual Explorer</PageTitle>
 
 <div class="packages-container">
-    <div class="header">
-        <h1>NuGet Package Universe</h1>
-        <p>Bubble size represents the number of package versions. Lines indicate dependencies.</p>
-        <div class="controls">
-            <input type="text" 
-                   @bind="searchTerm" 
-                   @bind:event="oninput"
-                   placeholder="Search packages..." 
-                   class="search-input" />
-            <span class="package-count">@filteredPackages.Count() packages</span>
-        </div>
-    </div>
-
     @if (isLoading)
     {
         <div class="loading">
@@ -34,101 +22,110 @@
     }
     else
     {
-        <div class="graph-container">
-            <svg class="package-svg" 
-                 @ref="svgElement"
-                 viewBox="@viewBox"
-                 preserveAspectRatio="xMidYMid meet">
-                <defs>
-                    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                        <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                        <feMerge>
-                            <feMergeNode in="coloredBlur"/>
-                            <feMergeNode in="SourceGraphic"/>
-                        </feMerge>
-                    </filter>
-                    <radialGradient id="bubbleGradient" cx="35%" cy="35%" r="65%">
-                        <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:0.9" />
-                        <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.7" />
-                    </radialGradient>
-                    <radialGradient id="bubbleGradientHover" cx="35%" cy="35%" r="65%">
-                        <stop offset="0%" style="stop-color:#93c5fd;stop-opacity:1" />
-                        <stop offset="100%" style="stop-color:#60a5fa;stop-opacity:0.85" />
-                    </radialGradient>
-                </defs>
-
-                <!-- Dependency lines -->
-                @foreach (var edge in visibleEdges)
-                {
-                    <line x1="@edge.SourceX" y1="@edge.SourceY" 
-                          x2="@edge.TargetX" y2="@edge.TargetY" 
-                          class="dependency-line"
-                          stroke-width="1.5" />
-                }
-
-                <!-- Package bubbles -->
-                @foreach (var pkg in positionedPackages)
-                {
-                    <g class="bubble-group" 
-                       @onclick="() => SelectPackage(pkg)"
-                       @onmouseover="() => HoverPackage(pkg)"
-                       @onmouseout="ClearHover">
-                        <circle cx="@pkg.X" cy="@pkg.Y" r="@pkg.Radius" 
-                                class="package-bubble @(isSelected(pkg) ? "selected" : "") @(isHovered(pkg) ? "hovered" : "")"
-                                fill="url(#bubbleGradient@(isHovered(pkg) ? "Hover" : ""))" />
-                        <text x="@pkg.X" y="@pkg.Y" 
-                              class="bubble-label"
-                              text-anchor="middle" 
-                              dominant-baseline="central">
-                            <tspan x="@pkg.X" dy="-0.4em" class="bubble-name">@GetDisplayName(pkg.Name)</tspan>
-                            @if (pkg.Versions.Any())
-                            {
-                                <tspan x="@pkg.X" dy="1.2em" class="bubble-version">@pkg.Versions.Count versions</tspan>
-                            }
-                        </text>
-                    </g>
-                }
-            </svg>
-
+        <div class="canvas-wrapper">
+            <div class="canvas-controls">
+                <button @onclick="ZoomIn" class="control-btn" title="Zoom In">+</button>
+                <button @onclick="ZoomOut" class="control-btn" title="Zoom Out">−</button>
+                <button @onclick="ResetView" class="control-btn" title="Reset View">⟲</button>
+            </div>
+            
+            <div class="canvas-container" @ref="canvasContainer">
+                <div class="canvas-content" style="transform: translate(@(translateX)px, @(translateY)px) scale(@(zoomLevel)); transform-origin: center;">
+                    <svg class="package-svg" width="2000" height="2000" viewBox="0 0 2000 2000">
+                        <defs>
+                            <radialGradient id="bubbleGradient1" cx="35%" cy="35%" r="65%">
+                                <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:0.9" />
+                                <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.7" />
+                            </radialGradient>
+                            <radialGradient id="bubbleGradient2" cx="35%" cy="35%" r="65%">
+                                <stop offset="0%" style="stop-color:#a78bfa;stop-opacity:0.9" />
+                                <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:0.7" />
+                            </radialGradient>
+                            <radialGradient id="bubbleGradient3" cx="35%" cy="35%" r="65%">
+                                <stop offset="0%" style="stop-color:#34d399;stop-opacity:0.9" />
+                                <stop offset="100%" style="stop-color:#10b981;stop-opacity:0.7" />
+                            </radialGradient>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+                        
+                        <!-- Dependency lines -->
+                        @foreach (var edge in edges)
+                        {
+                            <line x1="@edge.SourceX" y1="@edge.SourceY" 
+                                  x2="@edge.TargetX" y2="@edge.TargetY" 
+                                  class="dependency-line"
+                                  stroke-width="2" />
+                        }
+                        
+                        <!-- Package bubbles -->
+                        @foreach (var pkg in positionedPackages)
+                        {
+                            var gradientId = $"bubbleGradient{((pkg.Name.GetHashCode() % 3) + 3) % 3 + 1}";
+                            <g class="bubble-group" 
+                               @onclick="() => SelectPackage(pkg)"
+                               style="cursor: pointer;">
+                                <circle cx="@pkg.X" cy="@pkg.Y" r="@pkg.Radius" 
+                                        class="package-bubble @(selectedPackage?.Name == pkg.Name ? "selected" : "")"
+                                        fill="url(#@gradientId)"
+                                        filter="url(#glow)" />
+                                <text x="@pkg.X" y="@pkg.Y" 
+                                      class="bubble-label"
+                                      text-anchor="middle" 
+                                      dominant-baseline="central"
+                                      style="pointer-events: none;">
+                                    <tspan x="@pkg.X" dy="-0.3em" class="bubble-name">@GetDisplayName(pkg.Name)</tspan>
+                                    @if (pkg.Downloads > 0)
+                                    {
+                                        <tspan x="@pkg.X" dy="1.2em" class="bubble-downloads">@FormatDownloads(pkg.Downloads)</tspan>
+                                    }
+                                </text>
+                            </g>
+                        }
+                    </svg>
+                </div>
+            </div>
+            
             @if (selectedPackage is not null)
             {
-                <div class="package-details">
-                    <h3>@selectedPackage.Name</h3>
+                <div class="package-popup">
+                    <button @onclick="() => selectedPackage = null" class="popup-close">×</button>
+                    <h3 class="popup-title">@selectedPackage.Name</h3>
                     @if (!string.IsNullOrEmpty(selectedPackage.Description))
                     {
-                        <p class="description">@selectedPackage.Description</p>
+                        <p class="popup-description">@selectedPackage.Description</p>
                     }
-                    <div class="stats">
-                        <span class="stat">
-                            <strong>@selectedPackage.Versions.Count</strong> versions
-                        </span>
-                        <span class="stat">
-                            <strong>@selectedPackage.Dependencies.Count</strong> dependencies
-                        </span>
+                    <div class="popup-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Downloads</span>
+                            <span class="stat-value">@FormatDownloads(selectedPackage.Downloads)</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Dependencies</span>
+                            <span class="stat-value">@selectedPackage.Dependencies.Count</span>
+                        </div>
                     </div>
                     @if (selectedPackage.Dependencies.Any())
                     {
-                        <div class="dependencies-list">
+                        <div class="popup-deps">
                             <h4>Dependencies:</h4>
                             <ul>
-                                @foreach (var dep in selectedPackage.Dependencies.Take(10))
+                                @foreach (var dep in selectedPackage.Dependencies.Take(5))
                                 {
-                                    <li>
-                                        <span class="dep-name">@dep.TargetPackageName</span>
-                                        @if (!string.IsNullOrEmpty(dep.TargetVersionRange))
-                                        {
-                                            <span class="dep-version">(@dep.TargetVersionRange)</span>
-                                        }
-                                    </li>
+                                    <li>@dep.TargetPackageName</li>
                                 }
-                                @if (selectedPackage.Dependencies.Count > 10)
+                                @if (selectedPackage.Dependencies.Count > 5)
                                 {
-                                    <li class="more-deps">... and @(selectedPackage.Dependencies.Count - 10) more</li>
+                                    <li class="more">+ @(selectedPackage.Dependencies.Count - 5) more</li>
                                 }
                             </ul>
                         </div>
                     }
-                    <button @onclick="() => selectedPackage = null" class="btn-close">Close</button>
                 </div>
             }
         </div>
@@ -137,34 +134,32 @@
 
 @code {
     private List<PackageModel> packages = [];
-    private IEnumerable<PackageModel> filteredPackages => 
-        string.IsNullOrWhiteSpace(searchTerm) 
-            ? packages 
-            : packages.Where(p => p.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
-
-    private string searchTerm = string.Empty;
     private bool isLoading = true;
     private string? error;
     private PackageModel? selectedPackage;
-    private PackageModel? hoveredPackage;
-    private ElementReference svgElement;
-    private string viewBox = "0 0 1200 800";
-
+    
+    private ElementReference canvasContainer;
+    private double translateX = 0;
+    private double translateY = 0;
+    private double zoomLevel = 1.0;
+    private bool isDragging = false;
+    private double lastMouseX = 0;
+    private double lastMouseY = 0;
+    
     private List<PositionedPackage> positionedPackages = [];
-    private List<PackageEdge> visibleEdges = [];
-
+    private List<Edge> edges = [];
+    
     protected override async Task OnInitializedAsync()
     {
         await LoadPackages();
     }
-
+    
     private async Task LoadPackages()
     {
         isLoading = true;
         error = null;
         try
         {
-            // Try to load from the API service via Aspire service discovery
             var httpClient = new HttpClient();
             httpClient.BaseAddress = new Uri("https+http://apiservice");
             
@@ -194,128 +189,148 @@
             isLoading = false;
         }
     }
-
+    
     private void PositionPackages()
     {
-        var pkgs = filteredPackages.ToList();
-        if (!pkgs.Any())
+        if (!packages.Any())
         {
             positionedPackages.Clear();
-            visibleEdges.Clear();
+            edges.Clear();
             return;
         }
-
-        // Calculate radii based on version count
-        var minVersions = pkgs.Min(p => p.Versions.Count);
-        var maxVersions = pkgs.Max(p => p.Versions.Count);
-        var versionRange = maxVersions - minVersions;
-
-        positionedPackages = pkgs.Select(p =>
+        
+        // Sort by downloads - biggest in center
+        var sorted = packages.OrderByDescending(p => p.Downloads).ToList();
+        
+        // Calculate sizes based on downloads
+        var maxDownloads = sorted.Max(p => p.Downloads);
+        var minDownloads = sorted.Min(p => p.Downloads);
+        var downloadRange = Math.Max(maxDownloads - minDownloads, 1);
+        
+        var centerX = 1000.0;
+        var centerY = 1000.0;
+        
+        positionedPackages = new List<PositionedPackage>();
+        var nameToPkg = new Dictionary<string, PositionedPackage>();
+        
+        // Place the biggest package in center
+        if (sorted.Any())
         {
-            var normalizedSize = versionRange > 0 
-                ? (double)(p.Versions.Count - minVersions) / versionRange 
-                : 0.5;
-            var radius = 20 + normalizedSize * 60; // 20-80px radius
-            return new PositionedPackage
+            var first = sorted[0];
+            var radius = CalculateRadius(first.Downloads, minDownloads, maxDownloads);
+            var pkg = new PositionedPackage
             {
-                Model = p,
-                Name = p.Name,
-                Versions = p.Versions,
-                Dependencies = p.Dependencies,
+                Model = first,
+                Name = first.Name,
+                Downloads = first.Downloads,
+                Dependencies = first.Dependencies,
+                X = centerX,
+                Y = centerY,
                 Radius = radius
             };
-        }).ToList();
-
-        // Force-directed-like layout
-        LayoutPackages();
-
-        // Calculate edges
-        UpdateEdges();
-    }
-
-    private void LayoutPackages()
-    {
-        if (!positionedPackages.Any()) return;
-
-        var width = 1200;
-        var height = 800;
-        var centerX = width / 2;
-        var centerY = height / 2;
-
-        // Initial placement: sort by size and place in a spiral
-        var sorted = positionedPackages.OrderByDescending(p => p.Radius).ToList();
-        var nameSet = new HashSet<string>(sorted.Select(p => p.Name));
-
-        for (var i = 0; i < sorted.Count; i++)
-        {
-            var angle = i * 0.5;
-            var dist = 50 + i * 12;
-            sorted[i].X = centerX + Math.Cos(angle) * dist;
-            sorted[i].Y = centerY + Math.Sin(angle) * dist;
+            positionedPackages.Add(pkg);
+            nameToPkg[first.Name] = pkg;
         }
-
-        // Simple repulsion simulation
-        var repulsionStrength = 5000.0;
-        var attractionStrength = 0.005;
-        var idealDistance = 150.0;
-        var iterations = 100;
-
+        
+        // Place others in spiral pattern
+        var angleStep = 0.5;
+        var distanceStep = 80.0;
+        var currentAngle = 0.0;
+        var currentDistance = 150.0;
+        
+        for (int i = 1; i < sorted.Count; i++)
+        {
+            var pkgData = sorted[i];
+            var radius = CalculateRadius(pkgData.Downloads, minDownloads, maxDownloads);
+            
+            var x = centerX + Math.Cos(currentAngle) * currentDistance;
+            var y = centerY + Math.Sin(currentAngle) * currentDistance;
+            
+            var pkg = new PositionedPackage
+            {
+                Model = pkgData,
+                Name = pkgData.Name,
+                Downloads = pkgData.Downloads,
+                Dependencies = pkgData.Dependencies,
+                X = x,
+                Y = y,
+                Radius = radius
+            };
+            
+            positionedPackages.Add(pkg);
+            nameToPkg[pkgData.Name] = pkg;
+            
+            currentAngle += angleStep;
+            currentDistance += distanceStep;
+        }
+        
+        // Apply force-directed layout iterations
+        ApplyForceLayout(nameToPkg);
+        
+        // Build edges
+        BuildEdges(nameToPkg);
+    }
+    
+    private double CalculateRadius(int downloads, int min, int max)
+    {
+        var normalized = (double)(downloads - min) / Math.Max(max - min, 1);
+        return 25 + normalized * 100; // 25-125px radius
+    }
+    
+    private void ApplyForceLayout(Dictionary<string, PositionedPackage> nameToPkg)
+    {
+        var iterations = 50;
+        var repulsionStrength = 50000.0;
+        var attractionStrength = 0.01;
+        var idealDistance = 200.0;
+        
         for (var iter = 0; iter < iterations; iter++)
         {
             var temperature = 1.0 - (double)iter / iterations;
-
+            
             // Repulsion between all pairs
-            for (var i = 0; i < sorted.Count; i++)
+            foreach (var pkg1 in positionedPackages)
             {
                 var fx = 0.0;
                 var fy = 0.0;
-
-                for (var j = 0; j < sorted.Count; j++)
+                
+                foreach (var pkg2 in positionedPackages)
                 {
-                    if (i == j) continue;
-
-                    var dx = sorted[i].X - sorted[j].X;
-                    var dy = sorted[i].Y - sorted[j].Y;
-                    var dist = Math.Sqrt(dx * dx + dy * dy) + 0.01;
-                    var minDist = sorted[i].Radius + sorted[j].Radius + 30;
-
-                    if (dist < minDist * 3)
+                    if (pkg1 == pkg2) continue;
+                    
+                    var dx = pkg1.X - pkg2.X;
+                    var dy = pkg1.Y - pkg2.Y;
+                    var dist = Math.Sqrt(dx * dx + dy * dy) + 0.1;
+                    
+                    if (dist < 300)
                     {
                         var force = repulsionStrength / (dist * dist);
                         fx += (dx / dist) * force;
                         fy += (dy / dist) * force;
                     }
                 }
-
-                sorted[i].X += fx * temperature * 0.5;
-                sorted[i].Y += fy * temperature * 0.5;
+                
+                pkg1.X += fx * temperature * 0.3;
+                pkg1.Y += fy * temperature * 0.3;
             }
-
-            // Attraction along edges (dependencies pull packages together)
-            var edgeSet = new HashSet<string>();
-            foreach (var pkg in sorted)
+            
+            // Attraction for connected packages
+            foreach (var pkg in positionedPackages)
             {
                 foreach (var dep in pkg.Dependencies)
                 {
-                    if (!nameSet.Contains(dep.TargetPackageName)) continue;
-                    var edgeKey = $"{pkg.Name}-{dep.TargetPackageName}";
-                    var reverseKey = $"{dep.TargetPackageName}-{pkg.Name}";
-                    if (edgeSet.Contains(edgeKey) || edgeSet.Contains(reverseKey)) continue;
-                    edgeSet.Add(edgeKey);
-
-                    var target = sorted.FirstOrDefault(p => p.Name == dep.TargetPackageName);
-                    if (target is null) continue;
-
+                    if (!nameToPkg.TryGetValue(dep.TargetPackageName, out var target)) continue;
+                    
                     var dx = target.X - pkg.X;
                     var dy = target.Y - pkg.Y;
-                    var dist = Math.Sqrt(dx * dx + dy * dy) + 0.01;
-
+                    var dist = Math.Sqrt(dx * dx + dy * dy) + 0.1;
+                    
                     if (dist > idealDistance)
                     {
                         var force = (dist - idealDistance) * attractionStrength;
                         var moveX = (dx / dist) * force;
                         var moveY = (dy / dist) * force;
-
+                        
                         pkg.X += moveX * temperature;
                         pkg.Y += moveY * temperature;
                         target.X -= moveX * temperature * 0.5;
@@ -324,105 +339,341 @@
                 }
             }
         }
-
+        
         // Center the layout
-        var minX = sorted.Min(p => p.X - p.Radius);
-        var maxX = sorted.Max(p => p.X + p.Radius);
-        var minY = sorted.Min(p => p.Y - p.Radius);
-        var maxY = sorted.Max(p => p.Y + p.Radius);
-
-        var layoutWidth = maxX - minX;
-        var layoutHeight = maxY - minY;
-        var offsetX = centerX - (minX + layoutWidth / 2);
-        var offsetY = centerY - (minY + layoutHeight / 2);
-
-        // Scale to fit
-        var scaleX = (width - 100) / layoutWidth;
-        var scaleY = (height - 100) / layoutHeight;
-        var scale = Math.Min(scaleX, scaleY);
-
-        foreach (var pkg in sorted)
+        var avgX = positionedPackages.Average(p => p.X);
+        var avgY = positionedPackages.Average(p => p.Y);
+        var offsetX = 1000 - avgX;
+        var offsetY = 1000 - avgY;
+        
+        foreach (var pkg in positionedPackages)
         {
-            pkg.X = (pkg.X - minX - layoutWidth / 2) * scale + centerX;
-            pkg.Y = (pkg.Y - minY - layoutHeight / 2) * scale + centerY;
-            pkg.Radius *= Math.Sqrt(scale);
+            pkg.X += offsetX;
+            pkg.Y += offsetY;
         }
     }
-
-    private void UpdateEdges()
+    
+    private void BuildEdges(Dictionary<string, PositionedPackage> nameToPkg)
     {
-        var nameToPkg = positionedPackages.ToDictionary(p => p.Name);
+        edges.Clear();
         var edgeSet = new HashSet<string>();
-
-        visibleEdges.Clear();
-
+        
         foreach (var pkg in positionedPackages)
         {
             foreach (var dep in pkg.Dependencies)
             {
                 if (!nameToPkg.TryGetValue(dep.TargetPackageName, out var target)) continue;
-
-                var edgeKey = $"{pkg.Name}->{dep.TargetPackageName}";
+                
+                var edgeKey = $"{Math.Min(pkg.Name, dep.TargetPackageName)}-{Math.Max(pkg.Name, dep.TargetPackageName)}";
                 if (edgeSet.Contains(edgeKey)) continue;
                 edgeSet.Add(edgeKey);
-
-                visibleEdges.Add(new PackageEdge
+                
+                edges.Add(new Edge
                 {
-                    Source = pkg.Name,
-                    Target = dep.TargetPackageName,
                     SourceX = pkg.X,
                     SourceY = pkg.Y,
                     TargetX = target.X,
-                    TargetY = target.Y,
-                    VersionRange = dep.TargetVersionRange
+                    TargetY = target.Y
                 });
             }
         }
     }
-
+    
     private string GetDisplayName(string name)
     {
-        if (name.Length <= 12) return name;
-        return name[..10] + "...";
+        if (name.Length <= 15) return name;
+        return name[..12] + "...";
     }
-
-    private bool isSelected(PositionedPackage pkg) => selectedPackage?.Name == pkg.Name;
-    private bool isHovered(PositionedPackage pkg) => hoveredPackage?.Name == pkg.Name;
-
+    
+    private string FormatDownloads(int downloads)
+    {
+        if (downloads >= 1000000)
+            return $"{downloads / 1000000.0:F1}M";
+        if (downloads >= 1000)
+            return $"{downloads / 1000.0:F1}K";
+        return downloads.ToString();
+    }
+    
     private void SelectPackage(PositionedPackage pkg)
     {
         selectedPackage = selectedPackage?.Name == pkg.Name ? null : pkg.Model;
     }
-
-    private void HoverPackage(PositionedPackage pkg)
+    
+    private void ZoomIn()
     {
-        hoveredPackage = pkg.Model;
+        zoomLevel = Math.Min(zoomLevel * 1.2, 3.0);
     }
-
-    private void ClearHover()
+    
+    private void ZoomOut()
     {
-        hoveredPackage = null;
+        zoomLevel = Math.Max(zoomLevel / 1.2, 0.3);
     }
-
+    
+    private void ResetView()
+    {
+        translateX = 0;
+        translateY = 0;
+        zoomLevel = 1.0;
+    }
+    
     private class PositionedPackage
     {
         public PackageModel Model { get; init; } = null!;
         public string Name { get; init; } = string.Empty;
-        public List<PackageVersionModel> Versions { get; init; } = [];
+        public int Downloads { get; init; }
         public List<PackageDependencyModel> Dependencies { get; init; } = [];
         public double X { get; set; }
         public double Y { get; set; }
         public double Radius { get; set; }
     }
-
-    private class PackageEdge
+    
+    private class Edge
     {
-        public string Source { get; init; } = string.Empty;
-        public string Target { get; init; } = string.Empty;
         public double SourceX { get; set; }
         public double SourceY { get; set; }
         public double TargetX { get; set; }
         public double TargetY { get; set; }
-        public string VersionRange { get; init; } = string.Empty;
     }
 }
+
+<style>
+    .packages-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        overflow: hidden;
+    }
+    
+    .loading, .error {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        color: #94a3b8;
+    }
+    
+    .spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid #334155;
+        border-top-color: #60a5fa;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    .btn-retry {
+        margin-top: 1.5rem;
+        padding: 0.75rem 2rem;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+    
+    .btn-retry:hover {
+        background: #2563eb;
+    }
+    
+    .canvas-wrapper {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+    }
+    
+    .canvas-controls {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        z-index: 100;
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .control-btn {
+        width: 40px;
+        height: 40px;
+        border: none;
+        border-radius: 8px;
+        background: rgba(30, 41, 59, 0.8);
+        color: #e2e8f0;
+        font-size: 1.5rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .control-btn:hover {
+        background: #3b82f6;
+        transform: scale(1.1);
+    }
+    
+    .canvas-container {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        cursor: grab;
+    }
+    
+    .canvas-container:active {
+        cursor: grabbing;
+    }
+    
+    .canvas-content {
+        transition: transform 0.1s ease-out;
+    }
+    
+    .package-svg {
+        width: 2000px;
+        height: 2000px;
+    }
+    
+    .dependency-line {
+        stroke: rgba(148, 163, 184, 0.3);
+        stroke-dasharray: 5 3;
+        animation: dashFlow 3s linear infinite;
+    }
+    
+    @keyframes dashFlow {
+        to { stroke-dashoffset: -16; }
+    }
+    
+    .package-bubble {
+        transition: all 0.2s ease;
+        stroke: #475569;
+        stroke-width: 2;
+    }
+    
+    .package-bubble:hover {
+        stroke: #60a5fa;
+        stroke-width: 3;
+        filter: drop-shadow(0 0 10px rgba(96, 165, 250, 0.6));
+    }
+    
+    .package-bubble.selected {
+        stroke: #a78bfa;
+        stroke-width: 4;
+        filter: drop-shadow(0 0 15px rgba(167, 139, 250, 0.8));
+    }
+    
+    .bubble-label {
+        fill: #f1f5f9;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    
+    .bubble-name {
+        font-weight: 600;
+    }
+    
+    .bubble-downloads {
+        font-size: 10px;
+        fill: #94a3b8;
+    }
+    
+    .package-popup {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        width: 300px;
+        background: rgba(30, 41, 59, 0.95);
+        border: 1px solid #475569;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        z-index: 100;
+        backdrop-filter: blur(10px);
+    }
+    
+    .popup-close {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.75rem;
+        background: none;
+        border: none;
+        color: #94a3b8;
+        font-size: 1.5rem;
+        cursor: pointer;
+        transition: color 0.2s;
+    }
+    
+    .popup-close:hover {
+        color: #e2e8f0;
+    }
+    
+    .popup-title {
+        margin: 0 0 0.75rem;
+        color: #60a5fa;
+        font-size: 1.25rem;
+        word-break: break-word;
+        padding-right: 1.5rem;
+    }
+    
+    .popup-description {
+        color: #cbd5e1;
+        font-size: 0.9rem;
+        line-height: 1.5;
+        margin: 0 0 1rem;
+    }
+    
+    .popup-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .stat-item {
+        background: rgba(51, 65, 85, 0.5);
+        padding: 0.75rem;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    .stat-label {
+        display: block;
+        color: #64748b;
+        font-size: 0.75rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .stat-value {
+        display: block;
+        color: #60a5fa;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+    
+    .popup-deps h4 {
+        color: #cbd5e1;
+        font-size: 0.9rem;
+        margin: 0 0 0.5rem;
+    }
+    
+    .popup-deps ul {
+        margin: 0;
+        padding-left: 1.2rem;
+        list-style: none;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+    
+    .popup-deps li {
+        color: #94a3b8;
+        font-size: 0.8rem;
+        margin: 0.25rem 0;
+    }
+    
+    .popup-deps li.more {
+        color: #475569;
+        font-style: italic;
+    }
+</style>

@@ -262,13 +262,9 @@ public class NuGetPackageCheckerService(
         if (_pipeline == null)
             throw new InvalidOperationException("Pipeline не инициализирован. Убедитесь, что сервис запущен корректно.");
 
-        // Увеличиваем таймаут для отдельных запросов, так как NuGet может отвечать медленно
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(60)); // 60 секунд на один запрос
-        
         try
         {
-            using var response = await httpClient.GetAsync(uri, cts.Token);
+            using var response = await httpClient.GetAsync(uri, cancellationToken);
             
             // Исправление NullReferenceException: строгая проверка статуса перед использованием контента
             if (!response.IsSuccessStatusCode)
@@ -297,8 +293,8 @@ public class NuGetPackageCheckerService(
                 return null;
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(cts.Token);
-            var tModel = await JsonSerializer.DeserializeAsync<T>(stream, CachedJsonSerializerOptions, cts.Token);
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var tModel = await JsonSerializer.DeserializeAsync<T>(stream, CachedJsonSerializerOptions, cancellationToken);
             
             return tModel ?? throw new JsonException($"Не удалось десериализовать объект типа {typeof(T).Name} из {uri}");
         }
@@ -317,6 +313,11 @@ public class NuGetPackageCheckerService(
         catch (HttpRequestException ex)
         {
             logger.LogWarning("HTTP ошибка при загрузке пакета: {Uri}. Ошибка: {Message}", uri, ex.Message);
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning("Ошибка JSON при загрузке пакета: {Uri}. Ошибка: {Message}", uri, ex.Message);
             return null;
         }
     }

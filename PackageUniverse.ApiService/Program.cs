@@ -44,29 +44,12 @@ services.AddEndpointsApiExplorer();
 services.AddControllers();
 
 // Настраиваем HttpClient для NuGetPackageCheckerService с увеличенными таймаутами
-// Стандартные настройки Polly (10 сек) слишком агрессивны для медленного API NuGet
+// Без сложных политик Polly, чтобы избежать проблем со стартом приложения
 services.AddHttpClient<NuGetPackageCheckerService>((sp, client) =>
-    {
-        client.Timeout = TimeSpan.FromMinutes(2); // Общий таймаут на операцию
-    })
-    .AddResilienceHandler(options =>
-    {
-        // Увеличиваем таймаут попытки до 60 секунд (вместо стандартных 10)
-        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(60);
-        
-        // Увеличиваем общий таймаут выполнения
-        options.ExecutionTimeout.Timeout = TimeSpan.FromMinutes(5);
-        
-        // Настройка повторных попыток - более консервативная
-        options.Retry.ShouldHandle = args => 
-            new ValueTask<bool>(args.Outcome.Exception is HttpRequestException or TimeoutRejectedException);
-        options.Retry.MaxRetryAttempts = 3;
-        options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
-        options.Retry.BaseDelay = TimeSpan.FromSeconds(2);
-        
-        // Circuit breaker - отключаем для фоновой задачи, чтобы не прерывать обработку надолго
-        options.CircuitBreaker.Disabled = true;
-    });
+{
+    // Устанавливаем общий таймаут на операцию - 2 минуты
+    client.Timeout = TimeSpan.FromMinutes(2);
+});
 
 services.AddHostedService<NuGetPackageCheckerService>();
 

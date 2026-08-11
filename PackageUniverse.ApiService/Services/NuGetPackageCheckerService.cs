@@ -1,5 +1,4 @@
-﻿using System.Collections.Concurrent;
-using System.Text.Json;
+﻿using System.Text.Json;
 using Mapster;
 using Microsoft.EntityFrameworkCore;
 using PackageUniverse.ApiService.Utils;
@@ -22,9 +21,6 @@ public class NuGetPackageCheckerService(
         PropertyNameCaseInsensitive = true
     };
 
-    private IPUContext _context = null!;
-    private HttpResponseValidationPipeline? _pipeline;
-
     private string NuGetGetUri => configuration["NuGet:CatalogsUri"]
                                   ?? throw new InvalidOperationException("NuGet Catalog URI не сконфигурирована.");
 
@@ -32,172 +28,207 @@ public class NuGetPackageCheckerService(
     {
         logger.LogInformation("NuGetPackageCheckerService running at: {Time}", DateTimeOffset.UtcNow);
         using var scope = serviceProvider.CreateScope();
-        _context = scope.ServiceProvider.GetRequiredService<IPUContext>();
-        _pipeline = scope.ServiceProvider.GetRequiredService<HttpResponseValidationPipeline>();
+        var context = scope.ServiceProvider.GetRequiredService<IPUContext>();
+        var pipeline = scope.ServiceProvider.GetRequiredService<HttpResponseValidationPipeline>();
 
-        await CheckForNewPackagesAsync(stoppingToken);
+        await CheckForNewPackagesAsync(context, pipeline, stoppingToken);
     }
 
 
-    private async Task CheckForNewPackagesAsync(CancellationToken stoppingToken)
+    private async Task CheckForNewPackagesAsync(IPUContext context, HttpResponseValidationPipeline pipeline, CancellationToken stoppingToken)
     {
-        if (_context is null) throw new InvalidOperationException("Context не инициализирован");
-
-        var catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri, stoppingToken);
+        var catalogList = await GetFromJson<CatalogListModel>(NuGetGetUri, pipeline, stoppingToken);
 
         foreach (var pageBatch in catalogList.Items.Chunk(4000)) // CatalogPage
-            await ProcessCatalogPagesAsync(pageBatch, stoppingToken); // по 4000 мета-страниц за раз
+            await ProcessCatalogPagesAsync(context, pipeline, pageBatch, stoppingToken); // по 4000 мета-страниц за раз
     }
 
-    private async Task ProcessCatalogPagesAsync(IEnumerable<CatalogPage> batch, CancellationToken stoppingToken)
+    private async Task ProcessCatalogPagesAsync(IPUContext context, HttpResponseValidationPipeline pipeline, IEnumerable<CatalogPage> batch, CancellationToken stoppingToken)
     {
-        var catalogs = new ConcurrentBag<CatalogModel>();
+        var catalogs = new List<CatalogModel>();
 
-        await BatchProcessor.ForEachAsync(batch, 16, async page =>
+        // Обрабатываем страницы последовательно для каждого батча, чтобы избежать проблем с DbContext
+        foreach (var page in batch)
         {
-            var catalog = await GetFromJson<CatalogModel>(page.NuGetUri, stoppingToken);
-            catalogs.Add(catalog);
-        }, logger);
+            if (stoppingToken.IsCancellationRequested)
+                stoppingToken.ThrowIfCancellationRequested();
 
+            try
+            {
+                var catalog = await GetFromJson<CatalogModel>(page.NuGetUri, pipeline, stoppingToken);
+                catalogs.Add(catalog);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Ошибка при обработке страницы каталога: {Uri}", page.NuGetUri);
+            }
+        }
 
-        await ProcessPackageBatchesAsync(catalogs, stoppingToken);
+        await ProcessPackageBatchesAsync(context, catalogs, stoppingToken);
     }
 
-    private async Task ProcessPackageBatchesAsync(IEnumerable<CatalogModel> catalogs, CancellationToken stoppingToken)
+    private async Task ProcessPackageBatchesAsync(IPUContext context, IEnumerable<CatalogModel> catalogs, CancellationToken stoppingToken)
     {
         var allUris = catalogs.SelectMany(c => c.Items.Select(p => p.NuGetUri)).ToList();
-        var throttle = new SemaphoreSlim(16);
 
-        foreach (var batch in allUris.Chunk(4000))
+        foreach (var batch in allUris.Chunk(100)) // Уменьшенный размер батча для надежной работы с EF Core
         {
-            using var batchScope = serviceProvider.CreateScope();
-            var batchContext = batchScope.ServiceProvider.GetRequiredService<IPUContext>();
+            if (stoppingToken.IsCancellationRequested)
+                stoppingToken.ThrowIfCancellationRequested();
 
-            var deferredDependencySaves = new ConcurrentBag<Func<Task>>();
-
-            var tasks = batch.Select(async uri =>
+            try
             {
-                await throttle.WaitAsync(stoppingToken);
-                try
-                {
-                    var pkg = await GetFromJson<PackageDetailModel>(uri, stoppingToken);
-                    using var taskScope = serviceProvider.CreateScope();
-                    var taskContext = taskScope.ServiceProvider.GetRequiredService<IPUContext>();
-                    await SavePackageDetailAsync(pkg, taskContext, deferredDependencySaves, batchContext, stoppingToken);
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Ошибка при обработке пакета: {Uri}", uri);
-                }
-                finally
-                {
-                    throttle.Release();
-                }
-            });
-
-            await Task.WhenAll(tasks);
-
-            // Deferred dependency saves — sequential on batchContext (no concurrency issues)
-            foreach (var save in deferredDependencySaves)
+                await ProcessPackageBatchAsync(context, batch, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                try
-                {
-                    await save();
-                }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Ошибка при сохранении зависимости");
-                }
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Ошибка при обработке батча пакетов");
             }
 
-            await batchContext.SaveChangesAsync(stoppingToken);
+            // Сохраняем после каждого батча
+            try
+            {
+                await context.SaveChangesAsync(stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Ошибка при сохранении батча в базу данных");
+            }
         }
+    }
+
+    private async Task ProcessPackageBatchAsync(IPUContext context, IEnumerable<string> batchUris, CancellationToken cancellationToken)
+    {
+        // Обрабатываем пакеты последовательно внутри батча для избежания проблем с трекингом EF Core
+        foreach (var uri in batchUris)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                var pkg = await GetPackageDetailAsync(uri, cancellationToken);
+                if (pkg != null)
+                    await SavePackageDetailAsync(context, pkg, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Ошибка при обработке пакета: {Uri}", uri);
+            }
+        }
+    }
+
+    private async Task<PackageDetailModel?> GetPackageDetailAsync(string uri, CancellationToken cancellationToken)
+    {
+        return await GetFromJson<PackageDetailModel>(uri, _pipeline!, cancellationToken);
     }
 
     private async Task SavePackageDetailAsync(
+        IPUContext context,
         PackageDetailModel pkg,
-        IPUContext taskContext,
-        ConcurrentBag<Func<Task>> deferredDependencySaves,
-        IPUContext batchContext,
         CancellationToken cancellationToken)
     {
         // 1. Find or create the main Package
-        var packageEntity = await taskContext.Packages
-            .FirstOrDefaultAsync(p => p.NuGetUri == pkg.PackageId, cancellationToken);
+        var packageEntity = await context.Packages
+            .FirstOrDefaultAsync(p => p.NugetId == pkg.PackageId, cancellationToken);
 
         if (packageEntity == null)
         {
-            packageEntity = pkg.Adapt<Package>();
-            taskContext.Packages.Add(packageEntity);
-            await taskContext.SaveChangesAsync(cancellationToken);
+            packageEntity = new Package
+            {
+                NugetId = pkg.PackageId,
+                Description = pkg.Description,
+                IsRecommended = false
+            };
+            context.Packages.Add(packageEntity);
+            await context.SaveChangesAsync(cancellationToken);
         }
 
         // 2. Find or create the specific version
-        var versionEntity = await taskContext.PackageVersions
+        var versionEntity = await context.PackageVersions
             .FirstOrDefaultAsync(v =>
                 v.PackageId == packageEntity.Id &&
                 v.Version == pkg.Version, cancellationToken);
 
         if (versionEntity == null)
         {
-            versionEntity = pkg.Adapt<PackageVersion>();
-            versionEntity.PackageId = packageEntity.Id;
-
-            taskContext.PackageVersions.Add(versionEntity);
-            await taskContext.SaveChangesAsync(cancellationToken);
+            versionEntity = new PackageVersion
+            {
+                PackageId = packageEntity.Id,
+                Version = pkg.Version,
+                PublishedAt = pkg.Published,
+                IsPrerelease = pkg.IsPrerelease,
+                TargetFramework = string.Empty,
+                PackageUrl = pkg.PackageId
+            };
+            context.PackageVersions.Add(versionEntity);
+            await context.SaveChangesAsync(cancellationToken);
         }
 
-        // 3. Defer dependency resolution — uses batchContext (sequential, after all tasks complete)
-        var capturedVersionId = versionEntity.Id;
-
+        // 3. Process dependencies sequentially
         foreach (var group in pkg.DependencyGroups)
         foreach (var dep in group.Dependencies)
-            deferredDependencySaves.Add(async () =>
+        {
+            if (cancellationToken.IsCancellationRequested)
+                cancellationToken.ThrowIfCancellationRequested();
+
+            try
             {
-                var targetPackage = await batchContext.Packages
-                    .FirstOrDefaultAsync(p => p.NuGetUri == dep.DependencyId, cancellationToken);
+                var targetPackage = await context.Packages
+                    .FirstOrDefaultAsync(p => p.NugetId == dep.DependencyId, cancellationToken);
 
                 if (targetPackage == null)
                 {
                     logger.LogDebug("Пропущена зависимость. Пакет {DepId} не найден", dep.DependencyId);
-                    return;
+                    continue;
                 }
 
-                var alreadyExists = await batchContext.PackageDependencies.AnyAsync(d =>
-                    d.SourceVersionId == capturedVersionId &&
+                var alreadyExists = await context.PackageDependencies.AnyAsync(d =>
+                    d.SourceVersionId == versionEntity.Id &&
                     d.TargetPackageId == targetPackage.Id &&
                     d.TargetVersionRange == dep.Range &&
                     d.TargetFramework == group.TargetFramework, cancellationToken);
 
                 if (!alreadyExists)
                 {
-                    var dependency = dep.Adapt<PackageDependency>();
-                    dependency.SourceVersionId = capturedVersionId;
-                    dependency.TargetPackageId = targetPackage.Id;
-                    dependency.TargetFramework = group.TargetFramework;
-
-                    batchContext.PackageDependencies.Add(dependency);
+                    var dependency = new PackageDependency
+                    {
+                        SourceVersionId = versionEntity.Id,
+                        TargetPackageId = targetPackage.Id,
+                        TargetVersionRange = dep.Range,
+                        TargetFramework = group.TargetFramework
+                    };
+                    context.PackageDependencies.Add(dependency);
                 }
-            });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Ошибка при обработке зависимости {DepId}", dep.DependencyId);
+            }
+        }
     }
 
-    private async Task<T> GetFromJson<T>(string uri, CancellationToken cancellationToken) where T : class
+    private HttpResponseValidationPipeline? _pipeline;
+
+    private async Task<T> GetFromJson<T>(string uri, HttpResponseValidationPipeline pipeline, CancellationToken cancellationToken) where T : class
     {
         if (string.IsNullOrWhiteSpace(uri))
             throw new ArgumentException("Параметр URI не может быть пустым.", nameof(uri));
-        if (_pipeline is null)
-            throw new InvalidOperationException("Validation pipeline не инициализирован.");
 
         using var response = await httpClient.GetAsync(uri, cancellationToken);
-        await _pipeline.ValidateAsync(new HttpValidationContext(response, uri),
+        await pipeline.ValidateAsync(new HttpValidationContext(response, uri),
             [HttpValidationTag.ExpectBody, HttpValidationTag.Get]);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);

@@ -200,11 +200,11 @@
         }
         
         // Sort by downloads - biggest in center
-        var sorted = packages.OrderByDescending(p => p.Downloads).ToList();
+        var sorted = packages.OrderByDescending(p => p.TotalDownloads).ToList();
         
         // Calculate sizes based on downloads
-        var maxDownloads = sorted.Max(p => p.Downloads);
-        var minDownloads = sorted.Min(p => p.Downloads);
+        var maxDownloads = sorted.Max(p => p.TotalDownloads);
+        var minDownloads = sorted.Min(p => p.TotalDownloads);
         var downloadRange = Math.Max(maxDownloads - minDownloads, 1);
         
         var centerX = 1000.0;
@@ -217,12 +217,12 @@
         if (sorted.Any())
         {
             var first = sorted[0];
-            var radius = CalculateRadius(first.Downloads, minDownloads, maxDownloads);
+            var radius = CalculateRadius(first.TotalDownloads, minDownloads, maxDownloads);
             var pkg = new PositionedPackage
             {
                 Model = first,
                 Name = first.Name,
-                Downloads = first.Downloads,
+                Downloads = first.TotalDownloads,
                 Dependencies = first.Dependencies,
                 X = centerX,
                 Y = centerY,
@@ -241,7 +241,7 @@
         for (int i = 1; i < sorted.Count; i++)
         {
             var pkgData = sorted[i];
-            var radius = CalculateRadius(pkgData.Downloads, minDownloads, maxDownloads);
+            var radius = CalculateRadius(pkgData.TotalDownloads, minDownloads, maxDownloads);
             
             var x = centerX + Math.Cos(currentAngle) * currentDistance;
             var y = centerY + Math.Sin(currentAngle) * currentDistance;
@@ -250,7 +250,7 @@
             {
                 Model = pkgData,
                 Name = pkgData.Name,
-                Downloads = pkgData.Downloads,
+                Downloads = pkgData.TotalDownloads,
                 Dependencies = pkgData.Dependencies,
                 X = x,
                 Y = y,

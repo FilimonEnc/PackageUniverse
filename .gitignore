@@ -1,55 +1,43 @@
-```razor
-# Build outputs
+```
+# Build artifacts
 bin/
 obj/
-out/
+*.dll
+*.exe
+*.pdb
+*.nupkg
+**/Debug/
+**/Release/
 
 # Dependencies
-node_modules/
 packages/
+node_modules/
+.nuget/
+.npm/
 
 # Logs
 *.log
+logs/
 
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
-# Editor/IDE
+# Editors
 .vscode/
 .idea/
 *.user
-*.suo
 *.userosscache
-*.sln.docstates
+*.suo
+*.csproj.user
 
 # OS generated files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Testing
 TestResults/
-
-# Browser extensions
-extension/
-
-# Localized resources
-*.g.cs
-*.Designer.cs
-
-# Bundling and minification
-wwwroot/css/site.min.css
-wwwroot/js/site.min.js
-wwwroot/css/site.css.map
-wwwroot/js/site.js.map
-
-# ASP.NET Core
-appsettings.Development.json
-appsettings.Production.json
-secrets.json
-
-# Temporary files
-*.tmp
-*.temp
+coverage/
 ```
